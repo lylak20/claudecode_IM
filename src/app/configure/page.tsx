@@ -11,9 +11,8 @@ export default function ConfigurePage() {
   const router = useRouter()
   const [url, setUrl] = useState('')
   const [scrapeResult, setScrapeResult] = useState<ScrapeResult | null>(null)
-  const [selectedSections, setSelectedSections] = useState<Set<string>>(
-    new Set(ALL_SECTIONS)
-  )
+  const [selectedSections, setSelectedSections] = useState<Set<string>>(new Set(ALL_SECTIONS))
+  const [sectionNotes, setSectionNotes] = useState<Record<string, string>>({})
   const [fileContent, setFileContent] = useState('')
   const [fileError, setFileError] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
@@ -21,52 +20,37 @@ export default function ConfigurePage() {
   useEffect(() => {
     const storedUrl = sessionStorage.getItem('lyla_url')
     const storedScrape = sessionStorage.getItem('lyla_scrape')
-
-    if (!storedUrl) {
-      router.replace('/')
-      return
-    }
-
+    if (!storedUrl) { router.replace('/'); return }
     setUrl(storedUrl)
     if (storedScrape) {
-      try {
-        setScrapeResult(JSON.parse(storedScrape))
-      } catch {}
+      try { setScrapeResult(JSON.parse(storedScrape)) } catch {}
     }
   }, [router])
 
   const toggleSection = (section: string) => {
     setSelectedSections((prev) => {
       const next = new Set(prev)
-      if (next.has(section)) {
-        next.delete(section)
-      } else {
-        next.add(section)
-      }
+      if (next.has(section)) next.delete(section)
+      else next.add(section)
       return next
     })
   }
 
-  const handleFileParsed = (text: string, filename: string) => {
-    setFileContent(text)
-    setFileError('')
+  const handleNoteChange = (section: string, note: string) => {
+    setSectionNotes((prev) => ({ ...prev, [section]: note }))
   }
 
   const handleGenerate = () => {
     if (selectedSections.size === 0) return
-
     setIsGenerating(true)
-
-    // Order sections as defined in ALL_SECTIONS
     const orderedSections = ALL_SECTIONS.filter((s) => selectedSections.has(s))
-
     sessionStorage.setItem('lyla_sections', JSON.stringify(orderedSections))
     sessionStorage.setItem('lyla_filetext', fileContent)
-
+    sessionStorage.setItem('lyla_section_notes', JSON.stringify(sectionNotes))
     router.push('/memo')
   }
 
-  const companyName = scrapeResult?.companyName || (url ? new URL(url).hostname.replace('www.', '') : '')
+  const companyName = scrapeResult?.companyName || (url ? (() => { try { return new URL(url).hostname.replace('www.', '') } catch { return '' } })() : '')
 
   return (
     <main className="min-h-screen bg-stone-50">
@@ -81,50 +65,48 @@ export default function ConfigurePage() {
           </svg>
           Back
         </button>
-        <div className="text-center">
-          <span className="font-serif text-lg font-semibold text-stone-800">
-            Lyla&rsquo;s Investment Memo
-          </span>
-        </div>
+        <span className="font-serif text-lg font-semibold text-stone-800">
+          Lyla&rsquo;s Investment Memo
+        </span>
         <div className="w-16" />
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-8">
+      <div className="max-w-2xl mx-auto px-6 py-8">
         {/* Company header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-stone-900 font-serif">
-            {companyName}
-          </h1>
-          <p className="text-stone-500 text-sm mt-1">{url}</p>
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-stone-900 font-serif">{companyName}</h1>
+          <p className="text-stone-400 text-sm mt-1">{url}</p>
           {scrapeResult?.description && (
-            <p className="text-stone-600 text-sm mt-2 max-w-2xl">{scrapeResult.description}</p>
+            <p className="text-stone-600 text-sm mt-2">{scrapeResult.description}</p>
           )}
         </div>
 
-        {/* Two-column layout */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {/* Left — File upload */}
-          <div className="bg-white rounded-2xl border border-stone-200 p-6 min-h-[400px] flex flex-col">
-            <FileDropzone
-              onFileParsed={handleFileParsed}
-              onError={(msg) => setFileError(msg)}
-            />
-            {fileError && (
-              <p className="mt-2 text-sm text-red-600">{fileError}</p>
-            )}
-          </div>
+        {/* Supporting Document — top */}
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 mb-4">
+          <h2 className="text-base font-semibold text-stone-900 mb-1">Supporting Document</h2>
+          <p className="text-xs text-stone-400 mb-4">Attach financials, pitch deck, or data room files for richer analysis.</p>
+          <FileDropzone
+            onFileParsed={(text) => { setFileContent(text); setFileError('') }}
+            onError={(msg) => setFileError(msg)}
+          />
+          {fileError && <p className="mt-2 text-sm text-red-600">{fileError}</p>}
+        </div>
 
-          {/* Right — Section checklist */}
-          <div className="bg-white rounded-2xl border border-stone-200 p-6 overflow-y-auto max-h-[600px]">
-            <SectionChecklist
-              selected={selectedSections}
-              onToggle={toggleSection}
-            />
-          </div>
+        {/* Sections — below */}
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 mb-6">
+          <SectionChecklist
+            selected={selectedSections}
+            onToggle={toggleSection}
+            notes={sectionNotes}
+            onNoteChange={handleNoteChange}
+          />
         </div>
 
         {/* Generate button */}
         <div className="flex justify-end">
+          {selectedSections.size === 0 && (
+            <p className="text-sm text-red-500 mr-4 self-center">Select at least one section.</p>
+          )}
           <button
             onClick={handleGenerate}
             disabled={selectedSections.size === 0 || isGenerating}
@@ -145,12 +127,6 @@ export default function ConfigurePage() {
             )}
           </button>
         </div>
-
-        {selectedSections.size === 0 && (
-          <p className="text-right text-sm text-red-500 mt-2">
-            Select at least one section to continue.
-          </p>
-        )}
       </div>
     </main>
   )

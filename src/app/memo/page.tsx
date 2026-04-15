@@ -33,6 +33,7 @@ export default function MemoPage() {
     const sectionsRaw = sessionStorage.getItem('lyla_sections')
     const scrapeRaw = sessionStorage.getItem('lyla_scrape')
     const fileContent = sessionStorage.getItem('lyla_filetext') || undefined
+    const sectionNotesRaw = sessionStorage.getItem('lyla_section_notes')
 
     if (!url || !sectionsRaw) {
       router.replace('/')
@@ -44,6 +45,9 @@ export default function MemoPage() {
 
     try { sections = JSON.parse(sectionsRaw) } catch {}
     try { if (scrapeRaw) scrapeResult = JSON.parse(scrapeRaw) } catch {}
+
+    let sectionNotes: Record<string, string> = {}
+    try { if (sectionNotesRaw) sectionNotes = JSON.parse(sectionNotesRaw) } catch {}
 
     const name = scrapeResult?.companyName || (() => {
       try { return new URL(url).hostname.replace('www.', '') } catch { return '' }
@@ -79,6 +83,7 @@ export default function MemoPage() {
         const config: MemoConfig = {
           url,
           sections,
+          sectionNotes,
           scrapeResult,
           fileContent: fileContent || undefined,
           research: research || '',
@@ -98,6 +103,7 @@ export default function MemoPage() {
     sessionStorage.removeItem('lyla_scrape')
     sessionStorage.removeItem('lyla_sections')
     sessionStorage.removeItem('lyla_filetext')
+    sessionStorage.removeItem('lyla_section_notes')
     router.push('/')
   }
 

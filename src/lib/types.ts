@@ -8,6 +8,7 @@ export interface ScrapeResult {
 export interface MemoConfig {
   url: string
   sections: string[]
+  sectionNotes?: Record<string, string>
   fileContent?: string
   scrapeResult?: ScrapeResult
   research?: string
@@ -20,8 +21,9 @@ export const ALL_SECTIONS = [
   'Team',
   'Market',
   'Competitors',
-  'Financials',
   'Unit Economics',
+  'Financials',
+  'Investment Returns Analysis',
   'Investment Highlight',
   'Investment Risk',
 ] as const

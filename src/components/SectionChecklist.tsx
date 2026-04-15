@@ -5,71 +5,83 @@ import { ALL_SECTIONS } from '@/lib/types'
 interface SectionChecklistProps {
   selected: Set<string>
   onToggle: (section: string) => void
+  notes: Record<string, string>
+  onNoteChange: (section: string, note: string) => void
 }
 
-export default function SectionChecklist({ selected, onToggle }: SectionChecklistProps) {
+export default function SectionChecklist({
+  selected,
+  onToggle,
+  notes,
+  onNoteChange,
+}: SectionChecklistProps) {
   const allSelected = selected.size === ALL_SECTIONS.length
 
   const toggleAll = () => {
-    if (allSelected) {
-      ALL_SECTIONS.forEach((s) => {
-        if (selected.has(s)) onToggle(s)
-      })
-    } else {
-      ALL_SECTIONS.forEach((s) => {
-        if (!selected.has(s)) onToggle(s)
-      })
-    }
+    ALL_SECTIONS.forEach((s) => {
+      const has = selected.has(s)
+      if (allSelected && has) onToggle(s)
+      if (!allSelected && !has) onToggle(s)
+    })
   }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-lg font-semibold text-gray-900">Memo Sections</h2>
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-base font-semibold text-stone-900">Choose which sections</h2>
         <button
           onClick={toggleAll}
-          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
         >
           {allSelected ? 'Deselect all' : 'Select all'}
         </button>
       </div>
-      <p className="text-sm text-gray-500 mb-4">
-        Choose which sections to include in the memo.
+      <p className="text-xs text-stone-400 mb-4">
+        Check a section to include it. Add notes to override the default analysis.
       </p>
 
-      <div className="grid grid-cols-1 gap-2">
+      <div className="space-y-3">
         {ALL_SECTIONS.map((section) => {
           const isSelected = selected.has(section)
           return (
-            <label
-              key={section}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg border cursor-pointer transition-all ${
-                isSelected
-                  ? 'border-blue-300 bg-blue-50'
-                  : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              <div
-                className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border-2 transition-colors ${
-                  isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300 bg-white'
-                }`}
-              >
-                {isSelected && (
-                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
-              </div>
-              <input
-                type="checkbox"
-                className="sr-only"
-                checked={isSelected}
-                onChange={() => onToggle(section)}
-              />
-              <span className={`text-sm font-medium ${isSelected ? 'text-blue-900' : 'text-gray-700'}`}>
-                {section}
-              </span>
-            </label>
+            <div key={section} className={`rounded-xl border transition-all ${isSelected ? 'border-blue-200 bg-blue-50/50' : 'border-stone-200 bg-white'}`}>
+              {/* Checkbox row */}
+              <label className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none">
+                <div
+                  className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border-2 transition-colors ${
+                    isSelected ? 'bg-blue-600 border-blue-600' : 'border-stone-300 bg-white'
+                  }`}
+                >
+                  {isSelected && (
+                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
+                <input
+                  type="checkbox"
+                  className="sr-only"
+                  checked={isSelected}
+                  onChange={() => onToggle(section)}
+                />
+                <span className={`text-sm font-medium ${isSelected ? 'text-blue-900' : 'text-stone-600'}`}>
+                  {section}
+                </span>
+              </label>
+
+              {/* Notes textarea — always visible when selected */}
+              {isSelected && (
+                <div className="px-4 pb-3">
+                  <textarea
+                    value={notes[section] || ''}
+                    onChange={(e) => onNoteChange(section, e.target.value)}
+                    placeholder="Optional: add specific focus areas or override default analysis…"
+                    rows={2}
+                    className="w-full text-xs text-stone-700 placeholder-stone-400 bg-white border border-stone-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-300 focus:border-blue-300 transition-all"
+                  />
+                </div>
+              )}
+            </div>
           )
         })}
       </div>
