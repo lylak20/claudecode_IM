@@ -66,11 +66,6 @@ export default function FileDropzone({ onFileParsed, onError }: FileDropzoneProp
 
   return (
     <div className="h-full flex flex-col">
-      <h2 className="text-lg font-semibold text-gray-900 mb-2">Supporting Documents</h2>
-      <p className="text-sm text-gray-500 mb-4">
-        Optionally attach financials, pitch deck, or data room files.
-      </p>
-
       {uploadedFilename ? (
         <div className="flex-1 flex flex-col items-center justify-center border-2 border-emerald-300 bg-emerald-50 rounded-xl p-6">
           <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mb-3">
