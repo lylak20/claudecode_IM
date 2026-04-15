@@ -6,6 +6,7 @@ import { useMemoStream } from '@/hooks/useMemoStream'
 import MemoDisplay from '@/components/MemoDisplay'
 import HistorySidebar from '@/components/HistorySidebar'
 import AiChat from '@/components/AiChat'
+import DataAssistant from '@/components/DataAssistant'
 import { saveToHistory } from '@/lib/history'
 import type { HistoryItem } from '@/lib/history'
 import type { MemoConfig, ScrapeResult } from '@/lib/types'
@@ -25,6 +26,7 @@ export default function MemoPage() {
   const [companyName, setCompanyName] = useState('')
   const [phase, setPhase] = useState<Phase>('researching')
   const [researchStep, setResearchStep] = useState(0)
+  const [fileContent, setFileContent] = useState('')
   const [currentHistoryId, setCurrentHistoryId] = useState<string | undefined>()
   const [historySaved, setHistorySaved] = useState(false)
   const [historyRefresh, setHistoryRefresh] = useState(0)
@@ -55,6 +57,7 @@ export default function MemoPage() {
     const scrapeRaw = sessionStorage.getItem('lyla_scrape')
     const fileContent = sessionStorage.getItem('lyla_filetext') || undefined
     const sectionNotesRaw = sessionStorage.getItem('lyla_section_notes')
+    setFileContent(fileContent || '')
 
     if (!url || !sectionsRaw) {
       router.replace('/')
@@ -225,7 +228,7 @@ export default function MemoPage() {
         <div className="flex flex-1 overflow-hidden">
 
           {/* Left: History sidebar */}
-          <div className="no-print w-56 border-r border-stone-200 bg-white flex-shrink-0 overflow-hidden flex flex-col">
+          <div className="no-print w-48 border-r border-stone-200 bg-white flex-shrink-0 overflow-hidden flex flex-col">
             <HistorySidebar
               currentId={currentHistoryId}
               onSelect={handleHistorySelect}
@@ -327,13 +330,18 @@ export default function MemoPage() {
           </div>
 
           {/* Right: AI Chat */}
-          <div className="no-print w-80 border-l border-stone-200 bg-white flex-shrink-0 flex flex-col overflow-hidden">
+          <div className="no-print w-72 border-l border-stone-200 bg-white flex-shrink-0 flex flex-col overflow-hidden">
             <AiChat
               memoText={displayText}
               companyName={displayCompany}
               selectedText={selectedText}
               onClearSelection={() => setSelectedText('')}
             />
+          </div>
+
+          {/* Far right: Data Assistant */}
+          <div className="no-print w-80 border-l border-stone-200 bg-white flex-shrink-0 flex flex-col overflow-hidden">
+            <DataAssistant fileContent={fileContent} />
           </div>
         </div>
 
