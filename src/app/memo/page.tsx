@@ -1,18 +1,34 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useMemoStream } from '@/hooks/useMemoStream'
 import MemoDisplay from '@/components/MemoDisplay'
 import type { MemoConfig, ScrapeResult } from '@/lib/types'
 
+type Phase = 'researching' | 'generating' | 'done' | 'error'
+
+const RESEARCH_STEPS = [
+  'Scraping company website & subpages…',
+  'Searching recent news…',
+  'Scanning Reddit & Hacker News…',
+  'Building research brief…',
+]
+
 export default function MemoPage() {
   const router = useRouter()
   const { memoText, isStreaming, error, startStream } = useMemoStream()
   const [companyName, setCompanyName] = useState('')
-  const [hasStarted, setHasStarted] = useState(false)
+  const [phase, setPhase] = useState<Phase>('researching')
+  const [researchStep, setResearchStep] = useState(0)
+
+  // useRef guard — prevents React 18 StrictMode from calling startStream twice
+  const startedRef = useRef(false)
 
   useEffect(() => {
+    if (startedRef.current) return
+    startedRef.current = true
+
     const url = sessionStorage.getItem('lyla_url')
     const sectionsRaw = sessionStorage.getItem('lyla_sections')
     const scrapeRaw = sessionStorage.getItem('lyla_scrape')
@@ -26,31 +42,55 @@ export default function MemoPage() {
     let sections: string[] = []
     let scrapeResult: ScrapeResult | undefined
 
-    try {
-      sections = JSON.parse(sectionsRaw)
-    } catch {}
+    try { sections = JSON.parse(sectionsRaw) } catch {}
+    try { if (scrapeRaw) scrapeResult = JSON.parse(scrapeRaw) } catch {}
 
-    try {
-      if (scrapeRaw) scrapeResult = JSON.parse(scrapeRaw)
-    } catch {}
+    const name = scrapeResult?.companyName || (() => {
+      try { return new URL(url).hostname.replace('www.', '') } catch { return '' }
+    })()
+    setCompanyName(name)
 
-    if (scrapeResult?.companyName) {
-      setCompanyName(scrapeResult.companyName)
-    } else {
+    const run = async () => {
       try {
-        setCompanyName(new URL(url).hostname.replace('www.', ''))
-      } catch {}
+        // Phase 1: Research — animate through steps while waiting
+        setPhase('researching')
+        let stepIdx = 0
+        const stepTimer = setInterval(() => {
+          stepIdx = Math.min(stepIdx + 1, RESEARCH_STEPS.length - 1)
+          setResearchStep(stepIdx)
+        }, 1800)
+
+        const researchRes = await fetch('/api/research', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url,
+            companyName: name,
+            homepageHtml: scrapeResult?.rawText || '',
+          }),
+        })
+        clearInterval(stepTimer)
+        setResearchStep(RESEARCH_STEPS.length - 1)
+
+        const { research } = await researchRes.json().catch(() => ({ research: '' }))
+
+        // Phase 2: Stream memo
+        setPhase('generating')
+        const config: MemoConfig = {
+          url,
+          sections,
+          scrapeResult,
+          fileContent: fileContent || undefined,
+          research: research || '',
+        }
+        await startStream(config)
+        setPhase('done')
+      } catch {
+        setPhase('error')
+      }
     }
 
-    const config: MemoConfig = {
-      url,
-      sections,
-      scrapeResult,
-      fileContent: fileContent || undefined,
-    }
-
-    setHasStarted(true)
-    startStream(config)
+    run()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleStartOver = () => {
@@ -61,13 +101,8 @@ export default function MemoPage() {
     router.push('/')
   }
 
-  const handlePrint = () => {
-    window.print()
-  }
-
   return (
     <>
-      {/* Print styles */}
       <style>{`
         @media print {
           .no-print { display: none !important; }
@@ -92,9 +127,9 @@ export default function MemoPage() {
             Lyla&rsquo;s Investment Memo
           </span>
           <div className="flex items-center gap-3">
-            {!isStreaming && memoText && (
+            {phase === 'done' && memoText && (
               <button
-                onClick={handlePrint}
+                onClick={() => window.print()}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-stone-700 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -120,34 +155,61 @@ export default function MemoPage() {
             </div>
             <h1 className="font-serif text-3xl font-bold text-stone-900">{companyName}</h1>
             <p className="text-stone-500 text-sm mt-1">
-              {new Date().toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
+              {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
           </div>
 
-          {/* Memo content */}
+          {/* Memo content card */}
           <div className="memo-card bg-white rounded-2xl border border-stone-200 shadow-sm px-10 py-10">
-            {!hasStarted && (
-              <div className="flex items-center gap-3 text-stone-500">
-                <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
-                <span className="text-sm">Initializing…</span>
+
+            {/* Research phase */}
+            {phase === 'researching' && (
+              <div className="py-8">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-700 rounded-full animate-spin flex-shrink-0" />
+                  <span className="text-sm font-medium text-stone-700">Researching {companyName}…</span>
+                </div>
+                <div className="space-y-3 pl-8">
+                  {RESEARCH_STEPS.map((step, i) => (
+                    <div
+                      key={step}
+                      className={`flex items-center gap-2 text-sm transition-all duration-500 ${
+                        i < researchStep
+                          ? 'text-emerald-600'
+                          : i === researchStep
+                          ? 'text-stone-700'
+                          : 'text-stone-300'
+                      }`}
+                    >
+                      {i < researchStep ? (
+                        <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : i === researchStep ? (
+                        <div className="w-4 h-4 border border-stone-400 border-t-stone-700 rounded-full animate-spin flex-shrink-0" />
+                      ) : (
+                        <div className="w-4 h-4 rounded-full border border-stone-200 flex-shrink-0" />
+                      )}
+                      {step}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
-            {isStreaming && !memoText && (
-              <div className="flex items-center gap-3 text-stone-500">
+            {/* Generating phase (before first chunk arrives) */}
+            {phase === 'generating' && !memoText && (
+              <div className="flex items-center gap-3 text-stone-500 py-4">
                 <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
-                <span className="text-sm">Generating investment memo…</span>
+                <span className="text-sm">Writing memo…</span>
               </div>
             )}
 
-            {error && (
+            {/* Error state */}
+            {(phase === 'error' || error) && (
               <div className="bg-red-50 border border-red-200 rounded-xl p-5">
                 <p className="text-sm font-medium text-red-800 mb-1">Generation failed</p>
-                <p className="text-sm text-red-700">{error}</p>
+                <p className="text-sm text-red-700">{error || 'Something went wrong.'}</p>
                 <button
                   onClick={() => router.push('/configure')}
                   className="mt-3 text-sm text-red-700 underline hover:text-red-900"
@@ -157,12 +219,13 @@ export default function MemoPage() {
               </div>
             )}
 
+            {/* Streaming / done memo */}
             {memoText && (
               <MemoDisplay text={memoText} isStreaming={isStreaming} />
             )}
           </div>
 
-          {!isStreaming && memoText && (
+          {phase === 'done' && memoText && (
             <div className="no-print mt-6 flex justify-center">
               <button
                 onClick={handleStartOver}

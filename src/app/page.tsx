@@ -69,7 +69,7 @@ export default function Home() {
             Lyla&rsquo;s Investment Memo
           </h1>
           <p className="text-stone-500 text-base">
-            AI-powered investment analysis for venture-stage companies
+            AI-powered investment analysis for growth-stage companies
           </p>
         </div>
 
@@ -85,7 +85,7 @@ export default function Home() {
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://company.com"
-                className="flex-1 px-4 py-3 rounded-xl border border-stone-200 text-stone-900 placeholder-stone-400 text-sm focus:outline-none focus:ring-2 focus:ring-stone-300 focus:border-transparent transition-all"
+                className="flex-1 px-4 py-3 rounded-xl border border-blue-200 bg-blue-50 text-stone-900 placeholder-stone-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-transparent transition-all"
                 disabled={isLoading}
                 autoFocus
               />

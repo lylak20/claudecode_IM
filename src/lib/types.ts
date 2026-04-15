@@ -10,6 +10,7 @@ export interface MemoConfig {
   sections: string[]
   fileContent?: string
   scrapeResult?: ScrapeResult
+  research?: string
 }
 
 export const ALL_SECTIONS = [
