@@ -45,13 +45,32 @@ export default function AiChat({
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // When selectedText changes, pre-fill input with context
+  // Focus (but do NOT pre-fill) when user highlights text in the memo
   useEffect(() => {
     if (selectedText) {
-      setInput(`Regarding this part of the memo:\n\n"${selectedText}"\n\n`)
       textareaRef.current?.focus()
     }
   }, [selectedText])
+
+  // Auto-grow textarea as user types
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 160) + 'px'
+  }, [input])
+
+  // Collapse textarea while streaming, restore when done
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    if (isStreaming) {
+      el.style.height = '36px'
+    } else {
+      el.style.height = 'auto'
+      el.style.height = Math.min(el.scrollHeight, 160) + 'px'
+    }
+  }, [isStreaming])
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -305,9 +324,9 @@ export default function AiChat({
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={selectedText ? 'Ask how to improve this…' : 'Ask about the memo…'}
-            rows={2}
             disabled={isStreaming}
-            className="flex-1 resize-none rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-300 disabled:opacity-50"
+            style={{ minHeight: '36px', maxHeight: '160px', overflow: 'auto' }}
+            className="flex-1 resize-none rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-300 transition-all duration-200 disabled:opacity-50"
           />
           <button
             onClick={sendMessage}

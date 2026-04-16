@@ -30,6 +30,7 @@ export default function MemoPage() {
   const [currentHistoryId, setCurrentHistoryId] = useState<string | undefined>()
   const [historySaved, setHistorySaved] = useState(false)
   const [historyRefresh, setHistoryRefresh] = useState(0)
+  const [activeTab, setActiveTab] = useState<'ai' | 'data'>('ai')
 
   // History mode: viewing a saved memo instead of streaming a new one
   const [historyMode, setHistoryMode] = useState(false)
@@ -466,20 +467,46 @@ export default function MemoPage() {
             </div>
           </div>
 
-          {/* AI Chat */}
-          <div className="no-print w-72 border-l border-stone-200 bg-white flex-shrink-0 flex flex-col overflow-hidden">
-            <AiChat
-              memoText={displayText}
-              companyName={displayCompany}
-              selectedText={selectedText}
-              onClearSelection={() => setSelectedText('')}
-              onApplySuggestion={handleApplySuggestion}
-            />
-          </div>
-
-          {/* Data Assistant */}
+          {/* Right panel: tabbed AI Assistant / Data Assistant */}
           <div className="no-print w-80 border-l border-stone-200 bg-white flex-shrink-0 flex flex-col overflow-hidden">
-            <DataAssistant fileContent={fileContent} />
+            {/* Tab bar */}
+            <div className="flex flex-shrink-0 border-b border-stone-200 bg-stone-50">
+              <button
+                onClick={() => setActiveTab('ai')}
+                className={`flex-1 py-2.5 text-xs font-medium transition-colors ${
+                  activeTab === 'ai'
+                    ? 'bg-white text-stone-900 border-b-2 border-stone-800'
+                    : 'text-stone-500 hover:text-stone-700'
+                }`}
+              >
+                AI Assistant
+              </button>
+              <button
+                onClick={() => setActiveTab('data')}
+                className={`flex-1 py-2.5 text-xs font-medium transition-colors ${
+                  activeTab === 'data'
+                    ? 'bg-white text-stone-900 border-b-2 border-stone-800'
+                    : 'text-stone-500 hover:text-stone-700'
+                }`}
+              >
+                Data Assistant
+              </button>
+            </div>
+
+            {/* Tab content */}
+            <div className="flex-1 overflow-hidden flex flex-col">
+              {activeTab === 'ai' ? (
+                <AiChat
+                  memoText={displayText}
+                  companyName={displayCompany}
+                  selectedText={selectedText}
+                  onClearSelection={() => setSelectedText('')}
+                  onApplySuggestion={handleApplySuggestion}
+                />
+              ) : (
+                <DataAssistant fileContent={fileContent} />
+              )}
+            </div>
           </div>
         </div>
 
