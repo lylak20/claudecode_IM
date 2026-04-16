@@ -57,46 +57,11 @@ Include 5–8 direct competitors. Pull data from the research (news, Reddit, HN,
       : '',
 
     'Investment Returns Analysis': hasReturnsData
-      ? `Generate a full returns analysis using these inputs: Investment Amount = $${investmentAmount}M, Pre-Money Valuation = $${valuation}M. Calculate post-money valuation, ownership %, and use the best available ARR/revenue data from the research or uploaded financials as entry revenue. Then generate exactly the following tables in clean markdown:
+      ? `Output ONLY the following single HTML comment — do NOT output any tables or prose (all financial tables are auto-generated interactively):
 
-**Investment Assumptions**
-| Assumption | Value |
-|---|---|
-| Investment Amount | $${investmentAmount}M |
-| Pre-Money Valuation | $${valuation}M |
-| Post-Money Valuation | $[pre + investment]M |
-| Ownership % Acquired | [investment/(pre+investment) × 100]% |
-| Entry ARR | $[best estimate]M |
-| Entry EV/ARR Multiple | [post-money / entry ARR]x |
-| Hold Period | 5 years |
+<!-- IRA_CALCULATOR:{"entryRevenue": X.X, "investmentAmount": ${investmentAmount}, "valuation": ${valuation}} -->
 
-**5-Year Revenue Projection**
-| Case | Year 0 | Year 1 | Year 2 | Year 3 | Year 4 | Year 5 |
-|---|---|---|---|---|---|---|
-| Bear (25% CAGR) | $X | $X | $X | $X | $X | $X |
-| Base (50% CAGR) | $X | $X | $X | $X | $X | $X |
-| Bull (100% CAGR) | $X | $X | $X | $X | $X | $X |
-
-**Investment Returns by Case**
-| Metric | Bear | Base | Bull |
-|---|---|---|---|
-| Year 5 Revenue | $X | $X | $X |
-| Exit Multiple | Xx | Xx | Xx |
-| Exit Enterprise Value | $X | $X | $X |
-| Investor Return | $X | $X | $X |
-| MOIC | Xx | Xx | Xx |
-| IRR | X% | X% | X% |
-
-**Sensitivity Analysis — IRR by Revenue CAGR vs Exit Multiple**
-| Exit Multiple ↓ / CAGR → | 25% | 50% | 75% | 100% | 125% |
-|---|---|---|---|---|---|
-| 8x | X% | X% | X% | X% | X% |
-| 12x | X% | X% | X% | X% | X% |
-| 15x | X% | X% | X% | X% | X% |
-| 20x | X% | X% | X% | X% | X% |
-| 25x | X% | X% | X% | X% | X% |
-
-Calculate IRR using: IRR = (Exit Value / Investment)^(1/5) - 1. Label assumed figures with †.`
+Replace X.X with your best estimate of the company's current annual revenue or ARR in $M, derived from the research or uploaded financials. If genuinely unknown, use 0. Output nothing else for this section.`
       : '',
 
     'Investment Highlight': `Summarize the top 3 investment thesis points as concise bullet points. Each must be specific, evidence-grounded, and a distinct reason to invest. No generic statements like "large market" or "strong team" — be specific to this company.`,

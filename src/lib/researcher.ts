@@ -221,7 +221,7 @@ function extractCompanyNames(text: string, excludeName: string): string[] {
     }
   }
 
-  return [...found.entries()]
+  return Array.from(found.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
     .map(([name]) => name)

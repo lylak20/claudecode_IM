@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useMemoStream } from '@/hooks/useMemoStream'
 import MemoDisplay from '@/components/MemoDisplay'
+import IRACalculator from '@/components/IRACalculator'
 import HistorySidebar from '@/components/HistorySidebar'
 import AiChat from '@/components/AiChat'
 import DataAssistant from '@/components/DataAssistant'
@@ -51,12 +52,35 @@ export default function MemoPage() {
   // Floating "Ask AI" button position
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null)
 
+  // IRA calculator params (parsed from memo marker)
+  const [iraData, setIraData] = useState<{
+    entryRevenue: number
+    investmentAmount: number
+    valuation: number
+  } | null>(null)
+
   // useRef guard — prevents React 18 StrictMode from calling startStream twice
   const startedRef = useRef(false)
 
   const displayText = historyMode ? historyMemoText : (memoOverride ?? memoText)
   const displayCompany = companyName
   const activePhase = historyMode ? 'done' : phase
+
+  // ── Parse IRA marker from memo text ──────────────────────────────────────
+  const IRA_RE = /<!--\s*IRA_CALCULATOR:(\{[\s\S]*?\})\s*-->/
+  const iraMatch = displayText.match(IRA_RE)
+  let beforeIRA = displayText
+  let afterIRA = ''
+  let iraParams: { entryRevenue: number; investmentAmount: number; valuation: number } | null = null
+
+  if (iraMatch) {
+    try {
+      iraParams = JSON.parse(iraMatch[1])
+    } catch { /* malformed JSON — ignore */ }
+    const idx = displayText.indexOf(iraMatch[0])
+    beforeIRA = displayText.slice(0, idx)
+    afterIRA = displayText.slice(idx + iraMatch[0].length)
+  }
 
   // Auto-grow textarea height as content changes
   useEffect(() => {
@@ -163,6 +187,21 @@ export default function MemoPage() {
     }
   }, [phase, memoText, companyName, historySaved, historyMode])
 
+  // ── CSS Custom Highlight helper (Chrome/Edge ≥ 105) ──────────────────────
+  const applyCSSHighlight = useCallback((range: Range) => {
+    if (typeof CSS === 'undefined' || !('highlights' in CSS)) return
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const h = new (window as any).Highlight(range.cloneRange())
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(CSS as any).highlights.set('memo-selection', h)
+  }, [])
+
+  const clearCSSHighlight = useCallback(() => {
+    if (typeof CSS === 'undefined' || !('highlights' in CSS)) return
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(CSS as any).highlights.delete('memo-selection')
+  }, [])
+
   // Text selection detection — disabled in edit mode
   const handleMouseUp = useCallback(() => {
     if (isEditing) return
@@ -173,10 +212,12 @@ export default function MemoPage() {
       const rect = range.getBoundingClientRect()
       setSelectedText(text)
       setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top - 8 })
-    } else {
-      setTooltipPos(null)
+      // Persist the highlight visually even after the native selection clears
+      applyCSSHighlight(range)
     }
-  }, [isEditing])
+    // Do NOT clear tooltip/selectedText on empty selection — let it persist
+    // until the user explicitly dismisses or makes a new selection
+  }, [isEditing, applyCSSHighlight])
 
   useEffect(() => {
     document.addEventListener('mouseup', handleMouseUp)
@@ -185,7 +226,20 @@ export default function MemoPage() {
 
   const handleAskAI = () => {
     setTooltipPos(null)
+    // Keep CSS highlight so user can still see what they selected while chatting
+    // It clears when they make a new selection
   }
+
+  // Clicking inside memo re-triggers handleMouseUp; clicking the memo background
+  // (not on text) clears the persisted highlight
+  const handleMemoClick = useCallback((e: React.MouseEvent) => {
+    const sel = window.getSelection()
+    if (!sel || sel.toString().trim().length === 0) {
+      clearCSSHighlight()
+      setSelectedText('')
+      setTooltipPos(null)
+    }
+  }, [clearCSSHighlight])
 
   const handleApplySuggestion = (original: string, replacement: string) => {
     const newText = displayText.includes(original)
@@ -265,6 +319,17 @@ export default function MemoPage() {
         .edit-textarea::selection {
           background: #dbeafe;
         }
+        /* Persistent CSS Custom Highlight (Chrome/Edge ≥105) */
+        ::highlight(memo-selection) {
+          background-color: #bfdbfe;
+          color: inherit;
+        }
+        /* Hide number input spin buttons */
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
       `}</style>
 
       <div className="h-screen flex flex-col overflow-hidden bg-stone-50">
@@ -316,7 +381,7 @@ export default function MemoPage() {
           </div>
 
           {/* Middle: Memo content */}
-          <div className="flex-1 overflow-y-auto" ref={memoContainerRef}>
+          <div className="flex-1 overflow-y-auto" ref={memoContainerRef} onClick={handleMemoClick}>
             <div className="max-w-3xl mx-auto px-6 py-8">
 
               {/* Memo header */}
@@ -449,9 +514,37 @@ export default function MemoPage() {
                     />
                   )}
 
-                  {/* Read mode: rendered markdown */}
+                  {/* Read mode: rendered markdown — split at IRA marker */}
                   {!isEditing && displayText && (
-                    <MemoDisplay text={displayText} isStreaming={!historyMode && isStreaming} />
+                    <>
+                      {/* Part 1: everything before the IRA calculator marker */}
+                      <MemoDisplay
+                        text={beforeIRA}
+                        isStreaming={!historyMode && isStreaming && !iraParams}
+                      />
+
+                      {/* Part 2: interactive IRA calculator (replaces AI-generated tables) */}
+                      {iraParams && (
+                        <IRACalculator
+                          investmentAmount={Number(iraParams.investmentAmount)}
+                          preMoneyValuation={Number(iraParams.valuation)}
+                          entryRevenue={Number(iraParams.entryRevenue)}
+                        />
+                      )}
+
+                      {/* Part 3: rest of memo after IRA section */}
+                      {iraParams && afterIRA.trim() && (
+                        <MemoDisplay
+                          text={afterIRA}
+                          isStreaming={!historyMode && isStreaming}
+                        />
+                      )}
+
+                      {/* If still streaming and no IRA yet, show cursor on first part */}
+                      {!iraParams && !historyMode && isStreaming && (
+                        <span className="inline-block w-2 h-5 bg-gray-400 animate-pulse ml-0.5 align-middle" />
+                      )}
+                    </>
                   )}
                 </div>
               </div>
