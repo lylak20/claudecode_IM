@@ -32,7 +32,7 @@ async function scrapePage(url: string, maxChars = 2500): Promise<string> {
 }
 
 // Scrape homepage + key subpages (About, Blog, Team, Pricing, Product)
-async function scrapeCompanyDeep(baseUrl: string, homepageHtml: string): Promise<string> {
+async function scrapeCompanyDeep(baseUrl: string, homepageHtml: string): Promise<{ text: string; productUrl?: string; pricingUrl?: string }> {
   const base = new URL(baseUrl)
   const $ = load(homepageHtml)
   $('script, style, nav, footer, header, noscript').remove()
@@ -41,6 +41,9 @@ async function scrapeCompanyDeep(baseUrl: string, homepageHtml: string): Promise
   const keyPattern = /\b(about|team|blog|pricing|product|platform|solution|feature|how.it.works|press|news|investor|story|mission|customer|case.stud)\b/i
   const seen = new Set<string>([baseUrl])
   const toFetch: string[] = []
+
+  let productUrl: string | undefined
+  let pricingUrl: string | undefined
 
   $('a[href]').each((_, el) => {
     const href = $(el).attr('href') || ''
@@ -52,6 +55,13 @@ async function scrapeCompanyDeep(baseUrl: string, homepageHtml: string): Promise
       if (parsed.hostname === base.hostname && !seen.has(full)) {
         seen.add(full)
         toFetch.push(full)
+        // Track first product and pricing URLs
+        if (!productUrl && /about|product|platform|feature|solution/i.test(parsed.pathname)) {
+          productUrl = full
+        }
+        if (!pricingUrl && /pricing|plans|subscription/i.test(parsed.pathname)) {
+          pricingUrl = full
+        }
       }
     } catch {}
   })
@@ -73,7 +83,8 @@ async function scrapeCompanyDeep(baseUrl: string, homepageHtml: string): Promise
     .filter(Boolean)
     .join('\n\n')
 
-  return [homepageText, subpageTexts].filter(Boolean).join('\n\n').slice(0, 7000)
+  const text = [homepageText, subpageTexts].filter(Boolean).join('\n\n').slice(0, 7000)
+  return { text, productUrl, pricingUrl }
 }
 
 // Google News RSS — no API key needed
@@ -138,12 +149,17 @@ async function searchHackerNews(companyName: string): Promise<string> {
   return `Hacker News Discussions:\n${items.join('\n')}`
 }
 
+export interface ResearchResult {
+  research: string
+  screenshotUrls: { product?: string; pricing?: string }
+}
+
 // Main entry point — runs all research in parallel
 export async function conductResearch(
   url: string,
   companyName: string,
   homepageHtml: string
-): Promise<string> {
+): Promise<ResearchResult> {
   const [deepScrape, news, reddit, hn] = await Promise.allSettled([
     scrapeCompanyDeep(url, homepageHtml),
     searchGoogleNews(companyName),
@@ -151,15 +167,23 @@ export async function conductResearch(
     searchHackerNews(companyName),
   ])
 
+  const deepScrapeResult = deepScrape.status === 'fulfilled' ? deepScrape.value : { text: '', productUrl: undefined, pricingUrl: undefined }
+
   const parts: { label: string; value: string }[] = [
-    { label: 'COMPANY WEBSITE (homepage + subpages)', value: deepScrape.status === 'fulfilled' ? deepScrape.value : '' },
+    { label: 'COMPANY WEBSITE (homepage + subpages)', value: deepScrapeResult.text },
     { label: 'NEWS', value: news.status === 'fulfilled' ? news.value : '' },
     { label: 'REDDIT', value: reddit.status === 'fulfilled' ? reddit.value : '' },
     { label: 'HACKER NEWS', value: hn.status === 'fulfilled' ? hn.value : '' },
   ]
 
-  return parts
+  const research = parts
     .filter((p) => p.value.trim())
     .map((p) => `=== ${p.label} ===\n${p.value}`)
     .join('\n\n')
+
+  const screenshotUrls: { product?: string; pricing?: string } = {}
+  if (deepScrapeResult.productUrl) screenshotUrls.product = deepScrapeResult.productUrl
+  if (deepScrapeResult.pricingUrl) screenshotUrls.pricing = deepScrapeResult.pricingUrl
+
+  return { research, screenshotUrls }
 }

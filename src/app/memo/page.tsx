@@ -75,6 +75,8 @@ export default function MemoPage() {
     const fileContent = sessionStorage.getItem('lyla_filetext') || undefined
     const sectionNotesRaw = sessionStorage.getItem('lyla_section_notes')
     setFileContent(fileContent || '')
+    const investmentAmount = sessionStorage.getItem('lyla_investment_amount') || undefined
+    const valuation = sessionStorage.getItem('lyla_valuation') || undefined
 
     if (!url || !sectionsRaw) {
       router.replace('/')
@@ -116,7 +118,9 @@ export default function MemoPage() {
         clearInterval(stepTimer)
         setResearchStep(RESEARCH_STEPS.length - 1)
 
-        const { research } = await researchRes.json().catch(() => ({ research: '' }))
+        const resData = await researchRes.json().catch(() => ({ research: '', screenshotUrls: {} }))
+        const research = resData.research || ''
+        const screenshotUrls = resData.screenshotUrls || {}
 
         setPhase('generating')
         const config: MemoConfig = {
@@ -126,6 +130,9 @@ export default function MemoPage() {
           scrapeResult,
           fileContent: fileContent || undefined,
           research: research || '',
+          investmentAmount,
+          valuation,
+          screenshotUrls,
         }
         await startStream(config)
         setPhase('done')

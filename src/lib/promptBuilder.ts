@@ -1,105 +1,129 @@
 import type { MemoConfig } from './types'
 
-// Default analytical instructions for each section.
-// If the user provides notes, those override the default.
-const SECTION_DEFAULTS: Record<string, string> = {
-  'Product': `Describe the product(s) in detail based on the company website research: what problem it solves, key features, target customer segments, and notable differentiators. Use specific product names, feature names, and any pricing tiers mentioned. If the research contains a clear product description, quote or closely paraphrase it.`,
+const THUM_BASE = 'https://image.thum.io/get/width/1200/'
 
-  'Technology': `Focus on the technology moat. What is the core proprietary technology? How is it differentiated from competitors — proprietary models, unique datasets, patented methods, infrastructure advantages? Be specific about what a well-funded competitor would need to replicate it. If moat evidence is thin in the research, state that explicitly.`,
+function screenshotImg(url: string, alt: string): string {
+  return `\n![${alt}](${THUM_BASE}${url})\n`
+}
 
-  'Business Model': `Identify the revenue model: B2B Enterprise SaaS, B2C, marketplace, usage-based, or hybrid. Describe the pricing structure (monthly/annual subscription, per-seat, usage-based, freemium-to-paid). Identify primary revenue streams and the go-to-market motion (direct sales, PLG, channel). Note any evidence of contract sizes or ARPU from the research.`,
+export function buildMemoPrompt(config: MemoConfig): string {
+  const { url, sections: rawSections, sectionNotes = {}, fileContent, scrapeResult, research, investmentAmount, valuation, screenshotUrls } = config
 
-  'Team': `Cover the founding team with specifics on education (universities, degrees) and prior work experience (companies, titles, notable exits or achievements). Focus especially on CEO and CTO. Use any LinkedIn or biography data in the research. Where specific details are missing, note "LinkedIn verification required" rather than guessing.`,
+  const companyName = scrapeResult?.companyName || (() => { try { return new URL(url).hostname.replace('www.', '') } catch { return '' } })()
+  const hasFile = !!(fileContent?.trim())
+  const hasReturnsData = !!(investmentAmount?.trim() && valuation?.trim())
 
-  'Market': `Assess the market opportunity. Estimate TAM, SAM, and SOM with specific numbers and sources where available. Is this an existing market being disrupted, or a new category being created? Include market growth rate, key macro tailwinds, and any analyst estimates cited in the research. Where numbers are unavailable, acknowledge the gap and describe the qualitative opportunity.`,
+  // Auto-filter sections based on available data
+  const sections = rawSections.filter(s => {
+    if ((s === 'Unit Economics' || s === 'Financials') && !hasFile) return false
+    if (s === 'Investment Returns Analysis' && !hasReturnsData) return false
+    return true
+  })
 
-  'Competitors': `Output a markdown table with the following columns: **Company** | **Founders** | **Total Funding** | **Valuation** | **Key Investors**. Include 5–8 direct competitors. Pull data from the research (news, Reddit, HN). Where LinkedIn or exact figures are unavailable, note "verify" in that cell rather than guessing.`,
+  // Per-section instructions
+  const SECTION_INSTRUCTIONS: Record<string, string> = {
+    'Product': `Describe the product in concrete terms: what specific problem it solves, who the target customer is, key features, and how a user experiences it. Pull product names, feature names, and category language directly from the website research. Do NOT use generic descriptions.${screenshotUrls?.product ? screenshotImg(screenshotUrls.product, 'Product Overview') : ''}
+If data is insufficient: > *Diligence required — Request a product demo recording and customer references to validate core use case.*`,
 
-  'Unit Economics': `For B2B SaaS: analyze ACV, NRR/GRR, CAC, LTV, LTV:CAC ratio, and payback period. For B2C: analyze ARPU, DAU/MAU, retention/churn, and CAC. Use data from uploaded financial documents if available. Flag any metrics that are missing and explain why they matter for underwriting the investment.`,
+    'Technology': `Identify the technology moat specifically. Answer: (1) What is the core proprietary technology? (2) What data, model, or infrastructure advantage does the company have? (3) What would a well-funded competitor need to replicate this in 18 months? Focus on data network effects, proprietary training data, novel architecture, patents, exclusive partnerships, or infrastructure lock-in. If moat evidence is thin in the research, say so explicitly — do not invent a moat.
+> *Diligence required — Request technical architecture review, patent filings, and model benchmarks vs. open-source alternatives if specifics are unclear.*`,
 
-  'Financials': `Focus on ARR/revenue trajectory and current valuation. Calculate or estimate the EV/ARR multiple and compare it against the public and private peers identified in the Competitors section. Is the current valuation premium or discount justified by growth rate, margin profile, or competitive position? If revenue figures are unavailable, note what is required for diligence.`,
+    'Business Model': `State clearly: B2B Enterprise SaaS / B2B SMB SaaS / B2C / Marketplace / Usage-based / Hybrid. Then cover: (1) Pricing model: monthly/annual subscription, per-seat, usage-based, freemium-to-paid, tiered — with specific price points from the research. (2) GTM motion: PLG, direct sales, channel. (3) Primary revenue streams. (4) Any evidence of contract sizes, ARPU, or conversion rates.${screenshotUrls?.pricing ? screenshotImg(screenshotUrls.pricing, 'Pricing Page') : ''}
+If pricing details are missing: > *Diligence required — Request pricing deck, ACV range by segment, and current conversion rates from free to paid.*`,
 
-  'Investment Returns Analysis': `Generate a full returns analysis formatted as clean markdown tables. Structure it exactly as follows:
+    'Team': `Cover each founder/key executive with this structure: **[Name], [Title]** — [University, Degree if known]. Previously: [Company, Role, notable achievement]. Focus especially on CEO and CTO. Extract this from the company website "About" or "Team" page and from news articles in the research. What in their background is most relevant to THIS company succeeding? Be specific. If a founder's background is not in the research, say "Background not publicly available — LinkedIn verification required" rather than inventing details.`,
+
+    'Market': `Be concise and lead with numbers. Structure as:
+
+**TAM:** $XB — [one-line reasoning or source]
+**SAM:** $XB — [what subset is actually addressable by this company]
+**SOM:** $XM — [realistic 3–5 year capture, with reasoning]
+
+Include a bottom-up sanity check where possible: e.g., "[# of target users] × [$ARPU] = $X market." State the market growth rate (X% CAGR) and the 1–2 most important macro tailwinds. If analyst estimates exist in the research, cite them. Do not write long paragraphs — use numbers.
+> *Diligence required — Validate TAM/SAM sizing with primary market research if third-party estimates are unavailable.*`,
+
+    'Competitors': `Output a markdown table with exactly these columns:
+
+| Company | Founders | Total Funding | Valuation | Key Investors | Key Insight |
+
+Include 5–8 direct competitors. Pull data from the research (news, Reddit, HN, company websites). For Key Insight: write 1–2 short bullet points (no full sentences) capturing something material from recent news — e.g. "• Pivoted to enterprise in 2024 • Lost key AI partnership". Use N/A for any cell where data is not available in the research — do not guess or fabricate figures.`,
+
+    'Unit Economics': hasFile
+      ? `Analyze from the uploaded financial document. Determine the business model type first (B2B SaaS → ACV, NRR, CAC, LTV, payback period; B2C → ARPU, DAU/MAU, retention, CAC). Report all available metrics with exact figures from the file. Flag any missing key metrics and explain why they matter for underwriting.`
+      : '',
+
+    'Financials': hasFile
+      ? `Analyze from the uploaded financial document: ARR/revenue trajectory (YoY growth), gross margin, EBITDA margin, burn rate, and runway. Then focus on valuation: calculate EV/ARR (current or implied) and compare against the public and private peers from the Competitors section. Is the valuation premium or discount justified by growth rate, margin, or competitive position? State your view clearly.`
+      : '',
+
+    'Investment Returns Analysis': hasReturnsData
+      ? `Generate a full returns analysis using these inputs: Investment Amount = $${investmentAmount}M, Pre-Money Valuation = $${valuation}M. Calculate post-money valuation, ownership %, and use the best available ARR/revenue data from the research or uploaded financials as entry revenue. Then generate exactly the following tables in clean markdown:
 
 **Investment Assumptions**
 | Assumption | Value |
 |---|---|
-| Investment Amount | $[X]M |
-| Pre-Money Valuation | $[X]M |
-| Round Size | $[X]M |
-| Post-Money Valuation | $[X]M |
-| Ownership % Acquired | X.X% |
-| Entry Revenue (ARR) | $[X]M |
-| Entry EV/Revenue Multiple | X.Xx |
+| Investment Amount | $${investmentAmount}M |
+| Pre-Money Valuation | $${valuation}M |
+| Post-Money Valuation | $[pre + investment]M |
+| Ownership % Acquired | [investment/(pre+investment) × 100]% |
+| Entry ARR | $[best estimate]M |
+| Entry EV/ARR Multiple | [post-money / entry ARR]x |
 | Hold Period | 5 years |
 
 **5-Year Revenue Projection**
-| Case | Entry (Year 0) | Year 1 | Year 2 | Year 3 | Year 4 | Year 5 |
+| Case | Year 0 | Year 1 | Year 2 | Year 3 | Year 4 | Year 5 |
 |---|---|---|---|---|---|---|
-| Bear (0% growth) | $X | $X | $X | $X | $X | $X |
-| Base (50% growth) | $X | $X | $X | $X | $X | $X |
-| Bull (100% growth) | $X | $X | $X | $X | $X | $X |
+| Bear (25% CAGR) | $X | $X | $X | $X | $X | $X |
+| Base (50% CAGR) | $X | $X | $X | $X | $X | $X |
+| Bull (100% CAGR) | $X | $X | $X | $X | $X | $X |
 
-**Investment Return (Base Case)**
-| Metric | Value |
-|---|---|
-| Year 5 Revenue | $X |
-| Exit Multiple | X.Xx |
-| Enterprise Value | $X |
-| Return to Investor | $X |
-| MOIC | X.Xx |
-| IRR | XX% |
+**Investment Returns by Case**
+| Metric | Bear | Base | Bull |
+|---|---|---|---|
+| Year 5 Revenue | $X | $X | $X |
+| Exit Multiple | Xx | Xx | Xx |
+| Exit Enterprise Value | $X | $X | $X |
+| Investor Return | $X | $X | $X |
+| MOIC | Xx | Xx | Xx |
+| IRR | X% | X% | X% |
 
-**Sensitivity Analysis — IRR by Revenue Growth Rate vs Exit Multiple**
-| Exit Multiple ↓ / Growth → | 0% | 25% | 50% | 75% | 100% | 125% |
-|---|---|---|---|---|---|---|
-| 8.0x | X% | X% | X% | X% | X% | X% |
-| 10.0x | X% | X% | X% | X% | X% | X% |
-| 15.0x | X% | X% | X% | X% | X% | X% |
-| 20.0x | X% | X% | X% | X% | X% | X% |
-| 25.0x | X% | X% | X% | X% | X% | X% |
+**Sensitivity Analysis — IRR by Revenue CAGR vs Exit Multiple**
+| Exit Multiple ↓ / CAGR → | 25% | 50% | 75% | 100% | 125% |
+|---|---|---|---|---|---|
+| 8x | X% | X% | X% | X% | X% |
+| 12x | X% | X% | X% | X% | X% |
+| 15x | X% | X% | X% | X% | X% |
+| 20x | X% | X% | X% | X% | X% |
+| 25x | X% | X% | X% | X% | X% |
 
-Use financial data from uploaded documents if provided. Otherwise, use the best available information about the company's funding round, valuation, and ARR to populate assumptions. Calculate IRR using the standard formula: IRR = (Exit Value / Investment)^(1/Years) - 1. Label any assumed figures clearly.`,
+Calculate IRR using: IRR = (Exit Value / Investment)^(1/5) - 1. Label assumed figures with †.`
+      : '',
 
-  'Investment Highlight': `Summarize the top 3 investment thesis points as concise, specific bullet points. Each should be a distinct and compelling reason to invest, grounded in the research. Avoid generic statements.`,
+    'Investment Highlight': `Summarize the top 3 investment thesis points as concise bullet points. Each must be specific, evidence-grounded, and a distinct reason to invest. No generic statements like "large market" or "strong team" — be specific to this company.`,
 
-  'Investment Risk': `Summarize the top 3 most material risks as concise bullet points. For each risk, include a brief note on the mitigant or the diligence required to get comfortable. Focus on the risks most likely to impair returns.`,
-}
+    'Investment Risk': `Summarize the top 3 most material risks as concise bullet points. For each, include a brief mitigant or the specific diligence question needed to get comfortable. Focus on risks most likely to impair returns (e.g., competitive displacement, unit economics not proven, regulatory, key-man).`,
+  }
 
-export function buildMemoPrompt(config: MemoConfig): string {
-  const { url, sections, sectionNotes = {}, fileContent, scrapeResult, research } = config
-
-  const companyName =
-    scrapeResult?.companyName || new URL(url).hostname.replace('www.', '')
-
-  // Build per-section instruction block
-  const sectionInstructions = sections.map((s) => {
+  const sectionInstructions = sections.map(s => {
     const userNote = sectionNotes[s]?.trim()
-    const defaultInstruction = SECTION_DEFAULTS[s] || `Write a thorough analysis of ${s}.`
-    const instruction = userNote
-      ? `USER OVERRIDE: ${userNote}`
-      : defaultInstruction
+    const defaultInstruction = SECTION_INSTRUCTIONS[s] || `Write a thorough analysis of ${s}.`
+    const instruction = userNote ? `USER OVERRIDE: ${userNote}` : defaultInstruction
     return `### ${s}\n${instruction}`
   }).join('\n\n')
 
-  const researchBlock = research?.trim()
-    ? `\n\n${research}`
-    : ''
-
-  const financialsBlock = fileContent?.trim()
-    ? `\n\n=== UPLOADED FINANCIAL / SUPPORTING DOCUMENTS ===\n${fileContent}`
-    : ''
+  const researchBlock = research?.trim() ? `\n\n${research}` : ''
+  const financialsBlock = hasFile ? `\n\n=== UPLOADED FINANCIAL / SUPPORTING DOCUMENTS ===\n${fileContent}` : ''
 
   return `You are a senior investment analyst at a top-tier growth equity firm writing an Investment Committee memo on ${companyName}. IC partners are former operators and seasoned investors — they will immediately call out vague claims, invented metrics, or boilerplate.
 
 STRICT RULES:
 1. Every factual claim must come from the research data provided. Do NOT invent numbers, quotes, or facts.
-2. Where data is genuinely missing, write: "Diligence required: [specific question and why it matters]."
+2. Where data is genuinely missing, write a blockquote: > *Diligence required — [specific question and why it matters for the investment decision]*
 3. Be analytically skeptical — validate or challenge company claims where evidence is thin.
 4. Use specific product names, customer names, funding amounts, dates, and dollar figures exactly as they appear in the research.
-5. Community signals (Reddit, HN, news) are evidence of real-world reception — use them.
-6. If you cannot find accurate information for something, leave it blank or note it as "data not available" — do NOT make something up.
-7. Each section header must appear exactly once. Do not repeat sections.
+5. Community signals (Reddit, HN, news) are evidence of real-world reception — use them to validate or challenge the investment thesis.
+6. Each section header must appear exactly once. Do not repeat sections.
+7. For "Diligence required" items: always format as a blockquote with italic text: > *Diligence required — ...*
 
 MEMO SECTIONS — write each exactly once, in this order:
 ${sections.map(s => `- ${s}`).join('\n')}
@@ -110,7 +134,7 @@ ${sectionInstructions}
 FORMAT:
 - Start with a 2–3 sentence Executive Summary (no header): what the company does, current scale/stage, and the single most important investment consideration.
 - Each section: "## [Section Name]" header, then follow the section instructions above.
-- Output clean markdown only. No filler sentences.
+- Output clean markdown only. No filler sentences. No boilerplate.
 
 ---
 

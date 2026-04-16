@@ -12,6 +12,9 @@ export interface MemoConfig {
   fileContent?: string
   scrapeResult?: ScrapeResult
   research?: string
+  investmentAmount?: string
+  valuation?: string
+  screenshotUrls?: { product?: string; pricing?: string }
 }
 
 export const ALL_SECTIONS = [

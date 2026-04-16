@@ -39,11 +39,31 @@ export default function MemoDisplay({ text, isStreaming }: MemoDisplayProps) {
           strong: ({ children }) => (
             <strong className="font-semibold text-gray-900">{children}</strong>
           ),
-          blockquote: ({ children }) => (
-            <blockquote className="border-l-4 border-gray-200 pl-4 italic text-gray-600 my-4">
-              {children}
-            </blockquote>
-          ),
+          em: ({ children }) => {
+            // Blue italic for "Diligence required" items
+            const text = typeof children === 'string' ? children : ''
+            if (text.startsWith('Diligence required')) {
+              return <em className="not-italic text-blue-600 font-medium">{children}</em>
+            }
+            return <em>{children}</em>
+          },
+          blockquote: ({ children }) => {
+            // Check if it contains a "Diligence required" em
+            const childStr = JSON.stringify(children)
+            const isDiligence = childStr.includes('Diligence required')
+            if (isDiligence) {
+              return (
+                <blockquote className="border-l-4 border-blue-300 pl-4 py-1 my-3 bg-blue-50 rounded-r-lg italic text-blue-700 text-[14px]">
+                  {children}
+                </blockquote>
+              )
+            }
+            return (
+              <blockquote className="border-l-4 border-gray-200 pl-4 italic text-gray-600 my-4">
+                {children}
+              </blockquote>
+            )
+          },
           table: ({ children }) => (
             <div className="overflow-x-auto my-4">
               <table className="w-full text-sm border-collapse">{children}</table>
@@ -56,6 +76,22 @@ export default function MemoDisplay({ text, isStreaming }: MemoDisplayProps) {
           ),
           td: ({ children }) => (
             <td className="border border-gray-200 px-3 py-2 text-gray-700">{children}</td>
+          ),
+          img: ({ src, alt }) => (
+            <div className="my-4 rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={src}
+                alt={alt || 'Screenshot'}
+                className="w-full object-cover"
+                loading="lazy"
+              />
+              {alt && (
+                <p className="text-xs text-gray-400 text-center py-1.5 bg-gray-50 border-t border-gray-100">
+                  {alt}
+                </p>
+              )}
+            </div>
           ),
         }}
       >
