@@ -11,7 +11,9 @@ export default function ConfigurePage() {
   const router = useRouter()
   const [url, setUrl] = useState('')
   const [scrapeResult, setScrapeResult] = useState<ScrapeResult | null>(null)
-  const [selectedSections, setSelectedSections] = useState<Set<string>>(new Set(ALL_SECTIONS))
+  const [selectedSections, setSelectedSections] = useState<Set<string>>(
+    new Set(ALL_SECTIONS.filter(s => s !== 'Unit Economics' && s !== 'Financials'))
+  )
   const [sectionNotes, setSectionNotes] = useState<Record<string, string>>({})
   const [fileContent, setFileContent] = useState('')
   const [fileError, setFileError] = useState('')
@@ -53,6 +55,21 @@ export default function ConfigurePage() {
       return next
     })
   }, [investmentAmount, valuation])
+
+  // Auto-check Unit Economics + Financials when a file is uploaded; uncheck + disable when removed
+  useEffect(() => {
+    setSelectedSections(prev => {
+      const next = new Set(prev)
+      if (fileContent) {
+        next.add('Unit Economics')
+        next.add('Financials')
+      } else {
+        next.delete('Unit Economics')
+        next.delete('Financials')
+      }
+      return next
+    })
+  }, [fileContent])
 
   const handleGenerate = () => {
     if (selectedSections.size === 0) return
@@ -110,6 +127,13 @@ export default function ConfigurePage() {
           Post-money: ${(parseFloat(investmentAmount) + parseFloat(valuation)).toFixed(1)}M · Ownership: {((parseFloat(investmentAmount) / (parseFloat(investmentAmount) + parseFloat(valuation))) * 100).toFixed(1)}%
         </p>
       )}
+      <textarea
+        value={sectionNotes['Investment Returns Analysis'] || ''}
+        onChange={e => handleNoteChange('Investment Returns Analysis', e.target.value)}
+        placeholder="Optional: add specific focus areas or override default analysis…"
+        rows={2}
+        className="w-full text-xs text-stone-700 placeholder-stone-400 bg-white border border-stone-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-blue-300 focus:border-blue-300 transition-all"
+      />
     </div>
   )
 
@@ -162,6 +186,7 @@ export default function ConfigurePage() {
             onNoteChange={handleNoteChange}
             customContent={{ 'Investment Returns Analysis': iraContent }}
             lockedSections={new Set(['Investment Returns Analysis'])}
+            disabledSections={fileContent ? new Set() : new Set(['Unit Economics', 'Financials'])}
           />
         </div>
 
@@ -180,7 +205,7 @@ export default function ConfigurePage() {
               }`}
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-semibold text-stone-800">Analyst Notes</span>
+                <span className="text-sm font-semibold text-stone-800">Bullet Point Notes</span>
                 {tone === 'bullets' && (
                   <span className="w-4 h-4 rounded-full bg-stone-800 flex items-center justify-center flex-shrink-0">
                     <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">

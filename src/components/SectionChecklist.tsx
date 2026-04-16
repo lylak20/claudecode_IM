@@ -11,6 +11,8 @@ interface SectionChecklistProps {
   customContent?: Record<string, React.ReactNode>
   /** Sections whose checkbox cannot be manually toggled (driven by external state). */
   lockedSections?: Set<string>
+  /** Sections that are greyed out and unclickable, with a requirement hint shown. */
+  disabledSections?: Set<string>
 }
 
 export default function SectionChecklist({
@@ -20,6 +22,7 @@ export default function SectionChecklist({
   onNoteChange,
   customContent = {},
   lockedSections = new Set(),
+  disabledSections = new Set(),
 }: SectionChecklistProps) {
   const allSelected = selected.size === ALL_SECTIONS.length
 
@@ -50,18 +53,23 @@ export default function SectionChecklist({
         {ALL_SECTIONS.map((section) => {
           const isSelected = selected.has(section)
           const isLocked = lockedSections.has(section)
+          const isDisabled = disabledSections.has(section)
           const hasCustom = section in customContent
+          const canInteract = !isLocked && !isDisabled
 
           return (
-            <div key={section} className={`rounded-xl border transition-all ${isSelected ? 'border-blue-200 bg-blue-50/50' : 'border-stone-200 bg-white'}`}>
+            <div key={section} className={`rounded-xl border transition-all ${
+              isDisabled ? 'border-stone-100 bg-stone-50/50 opacity-60' :
+              isSelected ? 'border-blue-200 bg-blue-50/50' : 'border-stone-200 bg-white'
+            }`}>
               {/* Checkbox row */}
-              <label className={`flex items-center gap-3 px-4 py-3 select-none ${isLocked ? 'cursor-default' : 'cursor-pointer'}`}>
+              <label className={`flex items-center gap-3 px-4 py-3 select-none ${canInteract ? 'cursor-pointer' : 'cursor-default'}`}>
                 <div
                   className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border-2 transition-colors ${
-                    isSelected ? 'bg-blue-600 border-blue-600' : 'border-stone-300 bg-white'
-                  } ${isLocked ? 'opacity-80' : ''}`}
+                    isSelected && !isDisabled ? 'bg-blue-600 border-blue-600' : 'border-stone-300 bg-white'
+                  }`}
                 >
-                  {isSelected && (
+                  {isSelected && !isDisabled && (
                     <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                     </svg>
@@ -70,28 +78,35 @@ export default function SectionChecklist({
                 <input
                   type="checkbox"
                   className="sr-only"
-                  checked={isSelected}
-                  onChange={() => !isLocked && onToggle(section)}
+                  checked={isSelected && !isDisabled}
+                  onChange={() => canInteract && onToggle(section)}
                 />
-                <span className={`text-sm font-medium ${isSelected ? 'text-blue-900' : 'text-stone-600'}`}>
+                <span className={`text-sm font-medium ${isSelected && !isDisabled ? 'text-blue-900' : 'text-stone-500'}`}>
                   {section}
                 </span>
-                {isLocked && (
+                {isLocked && !isDisabled && (
                   <span className="ml-auto text-xs text-stone-400 italic">
                     {isSelected ? 'auto-enabled' : 'fill fields below to enable'}
                   </span>
                 )}
               </label>
 
-              {/* Custom content (always shown, replaces textarea) */}
-              {hasCustom && (
+              {/* Disabled hint */}
+              {isDisabled && (
+                <p className="px-4 pb-3 text-xs text-stone-400 italic -mt-1">
+                  Only included when a financial supporting document is uploaded.
+                </p>
+              )}
+
+              {/* Custom content (always shown when not disabled, replaces textarea) */}
+              {hasCustom && !isDisabled && (
                 <div className="px-4 pb-3">
                   {customContent[section]}
                 </div>
               )}
 
-              {/* Notes textarea — only for selected sections without custom content */}
-              {isSelected && !hasCustom && (
+              {/* Notes textarea — only for selected, non-disabled sections without custom content */}
+              {isSelected && !isDisabled && !hasCustom && (
                 <div className="px-4 pb-3">
                   <textarea
                     value={notes[section] || ''}
