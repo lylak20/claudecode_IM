@@ -7,7 +7,7 @@ import MemoDisplay from '@/components/MemoDisplay'
 import HistorySidebar from '@/components/HistorySidebar'
 import AiChat from '@/components/AiChat'
 import DataAssistant from '@/components/DataAssistant'
-import { saveToHistory } from '@/lib/history'
+import { saveToHistory, updateHistoryMemoText } from '@/lib/history'
 import type { HistoryItem } from '@/lib/history'
 import type { MemoConfig, ScrapeResult } from '@/lib/types'
 
@@ -35,6 +35,14 @@ export default function MemoPage() {
   const [historyMode, setHistoryMode] = useState(false)
   const [historyMemoText, setHistoryMemoText] = useState('')
 
+  // Allows overriding memoText after user edits a freshly generated memo
+  const [memoOverride, setMemoOverride] = useState<string | null>(null)
+
+  // Edit mode
+  const [isEditing, setIsEditing] = useState(false)
+  const [editText, setEditText] = useState('')
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null)
+
   // AI Chat selection
   const [selectedText, setSelectedText] = useState('')
   const memoContainerRef = useRef<HTMLDivElement>(null)
@@ -45,8 +53,17 @@ export default function MemoPage() {
   // useRef guard — prevents React 18 StrictMode from calling startStream twice
   const startedRef = useRef(false)
 
-  const displayText = historyMode ? historyMemoText : memoText
+  const displayText = historyMode ? historyMemoText : (memoOverride ?? memoText)
   const displayCompany = companyName
+  const activePhase = historyMode ? 'done' : phase
+
+  // Auto-grow textarea height as content changes
+  useEffect(() => {
+    const el = editTextareaRef.current
+    if (!el || !isEditing) return
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+  }, [editText, isEditing])
 
   useEffect(() => {
     if (startedRef.current) return
@@ -136,8 +153,9 @@ export default function MemoPage() {
     }
   }, [phase, memoText, companyName, historySaved, historyMode])
 
-  // Text selection detection
+  // Text selection detection — disabled in edit mode
   const handleMouseUp = useCallback(() => {
+    if (isEditing) return
     const selection = window.getSelection()
     const text = selection?.toString().trim() || ''
     if (text.length > 10 && memoContainerRef.current?.contains(selection?.anchorNode ?? null)) {
@@ -148,7 +166,7 @@ export default function MemoPage() {
     } else {
       setTooltipPos(null)
     }
-  }, [])
+  }, [isEditing])
 
   useEffect(() => {
     document.addEventListener('mouseup', handleMouseUp)
@@ -157,14 +175,43 @@ export default function MemoPage() {
 
   const handleAskAI = () => {
     setTooltipPos(null)
-    // selectedText is already set — AiChat will pick it up via prop
   }
 
   const handleHistorySelect = (item: HistoryItem) => {
+    setIsEditing(false)
     setHistoryMode(true)
     setHistoryMemoText(item.memoText)
     setCompanyName(item.companyName)
     setCurrentHistoryId(item.id)
+  }
+
+  // ── Edit mode handlers ───────────────────────────────────────────
+  const handleStartEdit = () => {
+    setEditText(displayText)
+    setIsEditing(true)
+    setTooltipPos(null)
+    // Focus after React renders
+    setTimeout(() => editTextareaRef.current?.focus(), 50)
+  }
+
+  const handleSaveEdit = () => {
+    const trimmed = editText.trim()
+    // Push edited text back into the right state
+    if (historyMode) {
+      setHistoryMemoText(trimmed)
+    } else {
+      setMemoOverride(trimmed)
+    }
+    // Persist to localStorage
+    if (currentHistoryId) {
+      updateHistoryMemoText(currentHistoryId, trimmed)
+    }
+    setIsEditing(false)
+  }
+
+  const handleCancelEdit = () => {
+    setIsEditing(false)
+    setEditText('')
   }
 
   const handleStartOver = () => {
@@ -176,8 +223,6 @@ export default function MemoPage() {
     router.push('/')
   }
 
-  const activePhase = historyMode ? 'done' : phase
-
   return (
     <>
       <style>{`
@@ -185,6 +230,16 @@ export default function MemoPage() {
           .no-print { display: none !important; }
           body { background: white; }
           .memo-card { box-shadow: none; border: none; padding: 0; }
+        }
+        .edit-textarea {
+          font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+          font-size: 0.9375rem;
+          line-height: 1.75;
+          color: #1c1917;
+          caret-color: #3b82f6;
+        }
+        .edit-textarea::selection {
+          background: #dbeafe;
         }
       `}</style>
 
@@ -224,7 +279,7 @@ export default function MemoPage() {
           </div>
         </div>
 
-        {/* Three-column body */}
+        {/* Four-column body */}
         <div className="flex flex-1 overflow-hidden">
 
           {/* Left: History sidebar */}
@@ -239,6 +294,7 @@ export default function MemoPage() {
           {/* Middle: Memo content */}
           <div className="flex-1 overflow-y-auto" ref={memoContainerRef}>
             <div className="max-w-3xl mx-auto px-6 py-8">
+
               {/* Memo header */}
               <div className="mb-6">
                 <div className="text-xs font-semibold tracking-widest text-stone-400 uppercase mb-1">
@@ -251,69 +307,129 @@ export default function MemoPage() {
               </div>
 
               {/* Memo content card */}
-              <div className="memo-card bg-white rounded-2xl border border-stone-200 shadow-sm px-8 py-8">
+              <div className="memo-card bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
 
-                {/* Research phase */}
-                {!historyMode && phase === 'researching' && (
-                  <div className="py-8">
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-700 rounded-full animate-spin flex-shrink-0" />
-                      <span className="text-sm font-medium text-stone-700">Researching {companyName}…</span>
-                    </div>
-                    <div className="space-y-3 pl-8">
-                      {RESEARCH_STEPS.map((step, i) => (
-                        <div
-                          key={step}
-                          className={`flex items-center gap-2 text-sm transition-all duration-500 ${
-                            i < researchStep
-                              ? 'text-emerald-600'
-                              : i === researchStep
-                              ? 'text-stone-700'
-                              : 'text-stone-300'
-                          }`}
-                        >
-                          {i < researchStep ? (
-                            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {/* Edit toolbar — only when done */}
+                {activePhase === 'done' && displayText && (
+                  <div className="no-print flex items-center justify-between px-8 py-3 border-b border-stone-100 bg-stone-50">
+                    {isEditing ? (
+                      <>
+                        <span className="flex items-center gap-1.5 text-xs text-blue-600 font-medium">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                          Editing memo
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={handleCancelEdit}
+                            className="px-3 py-1 text-xs text-stone-500 hover:text-stone-800 border border-stone-200 rounded-md hover:bg-white transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleSaveEdit}
+                            className="px-3 py-1 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors flex items-center gap-1"
+                          >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                             </svg>
-                          ) : i === researchStep ? (
-                            <div className="w-4 h-4 border border-stone-400 border-t-stone-700 rounded-full animate-spin flex-shrink-0" />
-                          ) : (
-                            <div className="w-4 h-4 rounded-full border border-stone-200 flex-shrink-0" />
-                          )}
-                          {step}
+                            Save changes
+                          </button>
                         </div>
-                      ))}
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-xs text-stone-400">Click <strong>Edit</strong> to make changes directly in the memo</span>
+                        <button
+                          onClick={handleStartEdit}
+                          className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-stone-600 border border-stone-200 rounded-md hover:bg-white hover:border-stone-300 transition-colors"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                          Edit memo
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <div className="px-8 py-8">
+                  {/* Research phase */}
+                  {!historyMode && phase === 'researching' && (
+                    <div className="py-8">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-700 rounded-full animate-spin flex-shrink-0" />
+                        <span className="text-sm font-medium text-stone-700">Researching {companyName}…</span>
+                      </div>
+                      <div className="space-y-3 pl-8">
+                        {RESEARCH_STEPS.map((step, i) => (
+                          <div
+                            key={step}
+                            className={`flex items-center gap-2 text-sm transition-all duration-500 ${
+                              i < researchStep
+                                ? 'text-emerald-600'
+                                : i === researchStep
+                                ? 'text-stone-700'
+                                : 'text-stone-300'
+                            }`}
+                          >
+                            {i < researchStep ? (
+                              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                              </svg>
+                            ) : i === researchStep ? (
+                              <div className="w-4 h-4 border border-stone-400 border-t-stone-700 rounded-full animate-spin flex-shrink-0" />
+                            ) : (
+                              <div className="w-4 h-4 rounded-full border border-stone-200 flex-shrink-0" />
+                            )}
+                            {step}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Generating phase (before first chunk arrives) */}
-                {!historyMode && phase === 'generating' && !memoText && (
-                  <div className="flex items-center gap-3 text-stone-500 py-4">
-                    <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
-                    <span className="text-sm">Writing memo…</span>
-                  </div>
-                )}
+                  {/* Generating phase */}
+                  {!historyMode && phase === 'generating' && !memoText && (
+                    <div className="flex items-center gap-3 text-stone-500 py-4">
+                      <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin" />
+                      <span className="text-sm">Writing memo…</span>
+                    </div>
+                  )}
 
-                {/* Error state */}
-                {!historyMode && (phase === 'error' || error) && (
-                  <div className="bg-red-50 border border-red-200 rounded-xl p-5">
-                    <p className="text-sm font-medium text-red-800 mb-1">Generation failed</p>
-                    <p className="text-sm text-red-700">{error || 'Something went wrong.'}</p>
-                    <button
-                      onClick={() => router.push('/configure')}
-                      className="mt-3 text-sm text-red-700 underline hover:text-red-900"
-                    >
-                      Go back and try again
-                    </button>
-                  </div>
-                )}
+                  {/* Error state */}
+                  {!historyMode && (phase === 'error' || error) && (
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-5">
+                      <p className="text-sm font-medium text-red-800 mb-1">Generation failed</p>
+                      <p className="text-sm text-red-700">{error || 'Something went wrong.'}</p>
+                      <button
+                        onClick={() => router.push('/configure')}
+                        className="mt-3 text-sm text-red-700 underline hover:text-red-900"
+                      >
+                        Go back and try again
+                      </button>
+                    </div>
+                  )}
 
-                {/* Memo text */}
-                {displayText && (
-                  <MemoDisplay text={displayText} isStreaming={!historyMode && isStreaming} />
-                )}
+                  {/* Edit mode: raw markdown textarea */}
+                  {isEditing && (
+                    <textarea
+                      ref={editTextareaRef}
+                      value={editText}
+                      onChange={e => setEditText(e.target.value)}
+                      className="edit-textarea w-full resize-none outline-none bg-transparent border-0 p-0 m-0"
+                      style={{ minHeight: '500px' }}
+                      spellCheck
+                    />
+                  )}
+
+                  {/* Read mode: rendered markdown */}
+                  {!isEditing && displayText && (
+                    <MemoDisplay text={displayText} isStreaming={!historyMode && isStreaming} />
+                  )}
+                </div>
               </div>
 
               {activePhase === 'done' && displayText && (
@@ -329,7 +445,7 @@ export default function MemoPage() {
             </div>
           </div>
 
-          {/* Right: AI Chat */}
+          {/* AI Chat */}
           <div className="no-print w-72 border-l border-stone-200 bg-white flex-shrink-0 flex flex-col overflow-hidden">
             <AiChat
               memoText={displayText}
@@ -339,14 +455,14 @@ export default function MemoPage() {
             />
           </div>
 
-          {/* Far right: Data Assistant */}
+          {/* Data Assistant */}
           <div className="no-print w-80 border-l border-stone-200 bg-white flex-shrink-0 flex flex-col overflow-hidden">
             <DataAssistant fileContent={fileContent} />
           </div>
         </div>
 
         {/* Floating "Ask AI" tooltip on text selection */}
-        {tooltipPos && (
+        {tooltipPos && !isEditing && (
           <div
             className="no-print fixed z-50 transform -translate-x-1/2 -translate-y-full"
             style={{ left: tooltipPos.x, top: tooltipPos.y }}

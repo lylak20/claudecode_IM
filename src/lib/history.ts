@@ -30,3 +30,8 @@ export function deleteFromHistory(id: string): void {
   const updated = loadHistory().filter((h) => h.id !== id)
   try { localStorage.setItem(KEY, JSON.stringify(updated)) } catch {}
 }
+
+export function updateHistoryMemoText(id: string, memoText: string): void {
+  const updated = loadHistory().map((h) => h.id === id ? { ...h, memoText } : h)
+  try { localStorage.setItem(KEY, JSON.stringify(updated)) } catch {}
+}
