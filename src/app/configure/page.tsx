@@ -43,6 +43,17 @@ export default function ConfigurePage() {
     setSectionNotes((prev) => ({ ...prev, [section]: note }))
   }
 
+  // Auto-check Investment Returns Analysis when both fields are filled, uncheck when either is empty
+  useEffect(() => {
+    const filled = investmentAmount.trim() !== '' && valuation.trim() !== ''
+    setSelectedSections(prev => {
+      const next = new Set(prev)
+      if (filled) next.add('Investment Returns Analysis')
+      else next.delete('Investment Returns Analysis')
+      return next
+    })
+  }, [investmentAmount, valuation])
+
   const handleGenerate = () => {
     if (selectedSections.size === 0) return
     setIsGenerating(true)
@@ -57,7 +68,50 @@ export default function ConfigurePage() {
   }
 
   const companyName = scrapeResult?.companyName || (url ? (() => { try { return new URL(url).hostname.replace('www.', '') } catch { return '' } })() : '')
-  const showReturnsInputs = selectedSections.has('Investment Returns Analysis')
+
+  // Inline content for Investment Returns Analysis section
+  const iraContent = (
+    <div className="space-y-3">
+      <p className="text-xs text-stone-500">Fill in both fields to enable this section. Leave blank to skip.</p>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs font-medium text-stone-600 mb-1.5">Investment Amount</label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-sm font-medium">$</span>
+            <input
+              type="number"
+              min="0"
+              value={investmentAmount}
+              onChange={e => setInvestmentAmount(e.target.value)}
+              placeholder="10"
+              className="w-full pl-7 pr-8 py-2 border border-stone-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 text-xs">M</span>
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-stone-600 mb-1.5">Pre-Money Valuation</label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-sm font-medium">$</span>
+            <input
+              type="number"
+              min="0"
+              value={valuation}
+              onChange={e => setValuation(e.target.value)}
+              placeholder="100"
+              className="w-full pl-7 pr-8 py-2 border border-stone-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300"
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 text-xs">M</span>
+          </div>
+        </div>
+      </div>
+      {investmentAmount && valuation && (
+        <p className="text-xs text-blue-600">
+          Post-money: ${(parseFloat(investmentAmount) + parseFloat(valuation)).toFixed(1)}M · Ownership: {((parseFloat(investmentAmount) / (parseFloat(investmentAmount) + parseFloat(valuation))) * 100).toFixed(1)}%
+        </p>
+      )}
+    </div>
+  )
 
   return (
     <main className="min-h-screen bg-stone-50">
@@ -99,62 +153,6 @@ export default function ConfigurePage() {
           {fileError && <p className="mt-2 text-sm text-red-600">{fileError}</p>}
         </div>
 
-        {/* Investment Returns Parameters — shown only when IRA section is selected */}
-        {showReturnsInputs && (
-          <div className="bg-white rounded-2xl border border-blue-200 p-6 mb-4">
-            <h2 className="text-base font-semibold text-stone-900 mb-1 flex items-center gap-2">
-              <svg className="w-4 h-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 11h.01M12 11h.01M15 11h.01M4 19h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-              Investment Returns Parameters
-            </h2>
-            <p className="text-xs text-stone-400 mb-4">
-              Fill in both fields to generate the Investment Returns Analysis with MOIC, IRR, and sensitivity tables. Leave blank to skip this section.
-            </p>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-stone-600 mb-1.5">
-                  Investment Amount
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-sm font-medium">$</span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={investmentAmount}
-                    onChange={e => setInvestmentAmount(e.target.value)}
-                    placeholder="10"
-                    className="w-full pl-7 pr-12 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 text-xs">M</span>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-stone-600 mb-1.5">
-                  Pre-Money Valuation
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-sm font-medium">$</span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={valuation}
-                    onChange={e => setValuation(e.target.value)}
-                    placeholder="100"
-                    className="w-full pl-7 pr-12 py-2 border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 text-xs">M</span>
-                </div>
-              </div>
-            </div>
-            {investmentAmount && valuation && (
-              <p className="mt-3 text-xs text-blue-600">
-                Post-money: ${(parseFloat(investmentAmount) + parseFloat(valuation)).toFixed(1)}M · Ownership: {((parseFloat(investmentAmount) / (parseFloat(investmentAmount) + parseFloat(valuation))) * 100).toFixed(1)}%
-              </p>
-            )}
-          </div>
-        )}
-
         {/* Sections */}
         <div className="bg-white rounded-2xl border border-stone-200 p-6 mb-4">
           <SectionChecklist
@@ -162,6 +160,8 @@ export default function ConfigurePage() {
             onToggle={toggleSection}
             notes={sectionNotes}
             onNoteChange={handleNoteChange}
+            customContent={{ 'Investment Returns Analysis': iraContent }}
+            lockedSections={new Set(['Investment Returns Analysis'])}
           />
         </div>
 

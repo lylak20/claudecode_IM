@@ -7,6 +7,10 @@ interface SectionChecklistProps {
   onToggle: (section: string) => void
   notes: Record<string, string>
   onNoteChange: (section: string, note: string) => void
+  /** Replaces the textarea for specific sections. Content is always shown (not just when selected). */
+  customContent?: Record<string, React.ReactNode>
+  /** Sections whose checkbox cannot be manually toggled (driven by external state). */
+  lockedSections?: Set<string>
 }
 
 export default function SectionChecklist({
@@ -14,6 +18,8 @@ export default function SectionChecklist({
   onToggle,
   notes,
   onNoteChange,
+  customContent = {},
+  lockedSections = new Set(),
 }: SectionChecklistProps) {
   const allSelected = selected.size === ALL_SECTIONS.length
 
@@ -43,14 +49,17 @@ export default function SectionChecklist({
       <div className="space-y-3">
         {ALL_SECTIONS.map((section) => {
           const isSelected = selected.has(section)
+          const isLocked = lockedSections.has(section)
+          const hasCustom = section in customContent
+
           return (
             <div key={section} className={`rounded-xl border transition-all ${isSelected ? 'border-blue-200 bg-blue-50/50' : 'border-stone-200 bg-white'}`}>
               {/* Checkbox row */}
-              <label className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none">
+              <label className={`flex items-center gap-3 px-4 py-3 select-none ${isLocked ? 'cursor-default' : 'cursor-pointer'}`}>
                 <div
                   className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 border-2 transition-colors ${
                     isSelected ? 'bg-blue-600 border-blue-600' : 'border-stone-300 bg-white'
-                  }`}
+                  } ${isLocked ? 'opacity-80' : ''}`}
                 >
                   {isSelected && (
                     <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -62,15 +71,27 @@ export default function SectionChecklist({
                   type="checkbox"
                   className="sr-only"
                   checked={isSelected}
-                  onChange={() => onToggle(section)}
+                  onChange={() => !isLocked && onToggle(section)}
                 />
                 <span className={`text-sm font-medium ${isSelected ? 'text-blue-900' : 'text-stone-600'}`}>
                   {section}
                 </span>
+                {isLocked && (
+                  <span className="ml-auto text-xs text-stone-400 italic">
+                    {isSelected ? 'auto-enabled' : 'fill fields below to enable'}
+                  </span>
+                )}
               </label>
 
-              {/* Notes textarea — always visible when selected */}
-              {isSelected && (
+              {/* Custom content (always shown, replaces textarea) */}
+              {hasCustom && (
+                <div className="px-4 pb-3">
+                  {customContent[section]}
+                </div>
+              )}
+
+              {/* Notes textarea — only for selected sections without custom content */}
+              {isSelected && !hasCustom && (
                 <div className="px-4 pb-3">
                   <textarea
                     value={notes[section] || ''}
