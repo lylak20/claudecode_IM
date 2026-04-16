@@ -27,8 +27,18 @@ Your role:
 - Suggest specific improvements to sections when asked
 - Provide additional analysis, market context, or competitive insight
 - Help refine language and sharpen arguments
-- If asked to rewrite a section, provide the improved text directly in markdown
-- Be concise and analytically rigorous — no filler`
+- Be concise and analytically rigorous — no filler
+
+REPLACEMENT TAGS — IMPORTANT:
+When the user asks you to improve, rewrite, or refine a specific highlighted passage from the memo, you MUST wrap your replacement text in <replacement>...</replacement> tags. Put ONLY the replacement text inside the tags (ready to drop straight into the document). Any explanation or commentary goes outside the tags, after them.
+
+Example format when improving a passage:
+<replacement>
+The improved paragraph text goes here, written in the same voice and markdown style as the rest of the memo.
+</replacement>
+Here is why I made these changes: ...
+
+Only use <replacement> tags when you're providing a direct in-place substitution for a highlighted passage. Do not use them for general answers or analysis.`
 
     const stream = await client.messages.stream({
       model: 'claude-sonnet-4-6',

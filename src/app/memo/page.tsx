@@ -177,6 +177,20 @@ export default function MemoPage() {
     setTooltipPos(null)
   }
 
+  const handleApplySuggestion = (original: string, replacement: string) => {
+    const newText = displayText.includes(original)
+      ? displayText.replace(original, replacement)
+      : displayText + '\n\n' + replacement // fallback: append if original not found
+    if (historyMode) {
+      setHistoryMemoText(newText)
+    } else {
+      setMemoOverride(newText)
+    }
+    if (currentHistoryId) {
+      updateHistoryMemoText(currentHistoryId, newText)
+    }
+  }
+
   const handleHistorySelect = (item: HistoryItem) => {
     setIsEditing(false)
     setHistoryMode(true)
@@ -452,6 +466,7 @@ export default function MemoPage() {
               companyName={displayCompany}
               selectedText={selectedText}
               onClearSelection={() => setSelectedText('')}
+              onApplySuggestion={handleApplySuggestion}
             />
           </div>
 

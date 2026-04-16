@@ -5,19 +5,43 @@ import { useEffect, useRef, useState } from 'react'
 interface Message {
   role: 'user' | 'assistant'
   content: string
+  /** The memo text that was highlighted when this message was sent */
+  selectionContext?: string
 }
+
+type SuggestionState = 'applied' | 'dismissed'
 
 interface AiChatProps {
   memoText: string
   companyName: string
   selectedText: string
   onClearSelection: () => void
+  onApplySuggestion: (original: string, replacement: string) => void
 }
 
-export default function AiChat({ memoText, companyName, selectedText, onClearSelection }: AiChatProps) {
+// Pull out text inside <replacement>...</replacement> tags
+function extractReplacement(content: string): string | null {
+  const match = content.match(/<replacement>([\s\S]*?)<\/replacement>/i)
+  return match ? match[1].trim() : null
+}
+
+// Remove the <replacement> block from the displayed text
+function stripReplacementTags(content: string): string {
+  return content.replace(/<replacement>[\s\S]*?<\/replacement>/gi, '').trim()
+}
+
+export default function AiChat({
+  memoText,
+  companyName,
+  selectedText,
+  onClearSelection,
+  onApplySuggestion,
+}: AiChatProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
+  // Track accept/reject state per message index
+  const [suggestionStates, setSuggestionStates] = useState<Record<number, SuggestionState>>({})
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -38,21 +62,44 @@ export default function AiChat({ memoText, companyName, selectedText, onClearSel
     const text = input.trim()
     if (!text || isStreaming) return
 
-    const newMessages: Message[] = [...messages, { role: 'user', content: text }]
+    // Capture selection before clearing
+    const capturedSelection = selectedText
+
+    const userMsg: Message = {
+      role: 'user',
+      content: text,
+      selectionContext: capturedSelection || undefined,
+    }
+    const newMessages: Message[] = [...messages, userMsg]
     setMessages(newMessages)
     setInput('')
     onClearSelection()
     setIsStreaming(true)
 
-    // Add empty assistant message to stream into
-    setMessages(prev => [...prev, { role: 'assistant', content: '' }])
+    // Empty assistant message tagged with same selection context
+    const assistantPlaceholder: Message = {
+      role: 'assistant',
+      content: '',
+      selectionContext: capturedSelection || undefined,
+    }
+    setMessages(prev => [...prev, assistantPlaceholder])
+
+    // If there was a selection, hint Claude to use replacement tags
+    const apiContent = capturedSelection
+      ? `${text}\n\n[Note: The user highlighted this passage from the memo — please wrap your replacement in <replacement>...</replacement> tags if you're providing a rewrite: "${capturedSelection.slice(0, 400)}"]`
+      : text
+
+    const apiMessages = [
+      ...newMessages.slice(0, -1).map(m => ({ role: m.role, content: m.content })),
+      { role: 'user' as const, content: apiContent },
+    ]
 
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: newMessages.map(m => ({ role: m.role, content: m.content })),
+          messages: apiMessages,
           memoText,
           companyName,
         }),
@@ -97,6 +144,15 @@ export default function AiChat({ memoText, companyName, selectedText, onClearSel
     }
   }
 
+  const handleAccept = (msgIndex: number, original: string, replacement: string) => {
+    onApplySuggestion(original, replacement)
+    setSuggestionStates(prev => ({ ...prev, [msgIndex]: 'applied' }))
+  }
+
+  const handleReject = (msgIndex: number) => {
+    setSuggestionStates(prev => ({ ...prev, [msgIndex]: 'dismissed' }))
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -114,27 +170,112 @@ export default function AiChat({ memoText, companyName, selectedText, onClearSel
               </svg>
             </div>
             <p className="text-xs text-stone-400 leading-relaxed">
-              Ask follow-up questions or highlight text in the memo to refine it.
+              Ask follow-up questions or highlight text in the memo to get suggested edits.
             </p>
           </div>
         )}
 
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div
-              className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap ${
-                msg.role === 'user'
-                  ? 'bg-stone-800 text-white rounded-br-sm'
-                  : 'bg-stone-100 text-stone-800 rounded-bl-sm'
-              }`}
-            >
-              {msg.content}
-              {msg.role === 'assistant' && isStreaming && i === messages.length - 1 && msg.content === '' && (
-                <span className="inline-block w-2 h-4 bg-stone-400 animate-pulse rounded-sm ml-0.5" />
+        {messages.map((msg, i) => {
+          const isLastStreaming = isStreaming && i === messages.length - 1
+          const replacement = msg.role === 'assistant' && msg.selectionContext && !isLastStreaming
+            ? extractReplacement(msg.content)
+            : null
+          const displayContent = replacement ? stripReplacementTags(msg.content) : msg.content
+          const suggestionState = suggestionStates[i]
+
+          return (
+            <div key={i}>
+              {/* Message bubble */}
+              <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap ${
+                    msg.role === 'user'
+                      ? 'bg-stone-800 text-white rounded-br-sm'
+                      : 'bg-stone-100 text-stone-800 rounded-bl-sm'
+                  }`}
+                >
+                  {displayContent || (isLastStreaming ? (
+                    <span className="inline-flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-stone-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-1.5 h-1.5 bg-stone-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-1.5 h-1.5 bg-stone-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </span>
+                  ) : '')}
+                </div>
+              </div>
+
+              {/* Suggestion diff card — shown for assistant messages with a replacement */}
+              {replacement && !suggestionState && (
+                <div className="mt-2 rounded-xl border border-stone-200 overflow-hidden text-xs shadow-sm">
+                  {/* Old text */}
+                  <div className="bg-red-50 border-b border-stone-200 px-3 py-2">
+                    <div className="flex items-center gap-1.5 mb-1.5 text-red-500 font-medium">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                      </svg>
+                      Current text
+                    </div>
+                    <p className="text-stone-500 leading-relaxed line-through decoration-red-300 max-h-20 overflow-y-auto">
+                      {msg.selectionContext}
+                    </p>
+                  </div>
+                  {/* New text */}
+                  <div className="bg-emerald-50 border-b border-stone-200 px-3 py-2">
+                    <div className="flex items-center gap-1.5 mb-1.5 text-emerald-600 font-medium">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Suggested replacement
+                    </div>
+                    <p className="text-stone-700 leading-relaxed max-h-32 overflow-y-auto whitespace-pre-wrap">
+                      {replacement}
+                    </p>
+                  </div>
+                  {/* Accept / Reject */}
+                  <div className="bg-white px-3 py-2 flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => handleReject(i)}
+                      className="flex items-center gap-1 px-2.5 py-1 text-xs text-stone-500 border border-stone-200 rounded-md hover:bg-stone-50 transition-colors"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      Reject
+                    </button>
+                    <button
+                      onClick={() => handleAccept(i, msg.selectionContext!, replacement)}
+                      className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700 transition-colors"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Accept
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Post-action badge */}
+              {replacement && suggestionState === 'applied' && (
+                <div className="mt-1.5 flex items-center gap-1 text-xs text-emerald-600 pl-1">
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Applied to memo
+                </div>
+              )}
+              {replacement && suggestionState === 'dismissed' && (
+                <div className="mt-1.5 flex items-center gap-1 text-xs text-stone-400 pl-1">
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Rejected
+                </div>
               )}
             </div>
-          </div>
-        ))}
+          )
+        })}
+
         <div ref={bottomRef} />
       </div>
 
@@ -163,7 +304,7 @@ export default function AiChat({ memoText, companyName, selectedText, onClearSel
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about the memo…"
+            placeholder={selectedText ? 'Ask how to improve this…' : 'Ask about the memo…'}
             rows={2}
             disabled={isStreaming}
             className="flex-1 resize-none rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800 placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-stone-300 disabled:opacity-50"
