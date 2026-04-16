@@ -7,7 +7,7 @@ function screenshotImg(url: string, alt: string): string {
 }
 
 export function buildMemoPrompt(config: MemoConfig): string {
-  const { url, sections: rawSections, sectionNotes = {}, fileContent, scrapeResult, research, investmentAmount, valuation, screenshotUrls } = config
+  const { url, sections: rawSections, sectionNotes = {}, fileContent, scrapeResult, research, investmentAmount, valuation, screenshotUrls, tone = 'prose' } = config
 
   const companyName = scrapeResult?.companyName || (() => { try { return new URL(url).hostname.replace('www.', '') } catch { return '' } })()
   const hasFile = !!(fileContent?.trim())
@@ -131,10 +131,20 @@ ${sections.map(s => `- ${s}`).join('\n')}
 PER-SECTION INSTRUCTIONS:
 ${sectionInstructions}
 
+WRITING STYLE — ${tone === 'bullets' ? 'BULLET BRIEF' : 'NARRATIVE MEMO'}:
+${tone === 'bullets'
+  ? `- Write in concise bullet points throughout. Lead every point with a number, fact, or finding — not a verb.
+- No full paragraphs unless a table or list would genuinely be worse. Maximum 1–2 lines per bullet.
+- Each section should be scannable in under 30 seconds.
+- Executive Summary: 3 tight bullets (company, scale, key consideration). No prose.`
+  : `- Write in complete, professional sentences. Develop arguments in coherent paragraphs.
+- Use formal IC memo language — analytical, precise, no filler.
+- Executive Summary: 2–3 full sentences. Confident and direct.
+- Bullets and tables are still appropriate for lists of facts, competitors, or metrics.`}
+
 FORMAT:
-- Start with a 2–3 sentence Executive Summary (no header): what the company does, current scale/stage, and the single most important investment consideration.
-- Each section: "## [Section Name]" header, then follow the section instructions above.
-- Output clean markdown only. No filler sentences. No boilerplate.
+- Executive Summary first (no header), then each section with "## [Section Name]" header.
+- Output clean markdown only. No boilerplate.
 
 ---
 

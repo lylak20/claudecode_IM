@@ -78,6 +78,7 @@ export default function MemoPage() {
     setFileContent(fileContent || '')
     const investmentAmount = sessionStorage.getItem('lyla_investment_amount') || undefined
     const valuation = sessionStorage.getItem('lyla_valuation') || undefined
+    const tone = (sessionStorage.getItem('lyla_tone') || 'prose') as 'bullets' | 'prose'
 
     if (!url || !sectionsRaw) {
       router.replace('/')
@@ -134,6 +135,7 @@ export default function MemoPage() {
           investmentAmount,
           valuation,
           screenshotUrls,
+          tone,
         }
         await startStream(config)
         setPhase('done')

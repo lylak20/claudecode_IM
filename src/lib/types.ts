@@ -15,6 +15,7 @@ export interface MemoConfig {
   investmentAmount?: string
   valuation?: string
   screenshotUrls?: { product?: string; pricing?: string }
+  tone?: 'bullets' | 'prose'
 }
 
 export const ALL_SECTIONS = [

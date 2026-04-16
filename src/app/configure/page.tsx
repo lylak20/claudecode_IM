@@ -18,6 +18,7 @@ export default function ConfigurePage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [investmentAmount, setInvestmentAmount] = useState('')
   const [valuation, setValuation] = useState('')
+  const [tone, setTone] = useState<'bullets' | 'prose'>('prose')
 
   useEffect(() => {
     const storedUrl = sessionStorage.getItem('lyla_url')
@@ -51,6 +52,7 @@ export default function ConfigurePage() {
     sessionStorage.setItem('lyla_section_notes', JSON.stringify(sectionNotes))
     sessionStorage.setItem('lyla_investment_amount', investmentAmount)
     sessionStorage.setItem('lyla_valuation', valuation)
+    sessionStorage.setItem('lyla_tone', tone)
     router.push('/memo')
   }
 
@@ -95,6 +97,59 @@ export default function ConfigurePage() {
             onError={(msg) => setFileError(msg)}
           />
           {fileError && <p className="mt-2 text-sm text-red-600">{fileError}</p>}
+        </div>
+
+        {/* Writing Style */}
+        <div className="bg-white rounded-2xl border border-stone-200 p-6 mb-4">
+          <h2 className="text-base font-semibold text-stone-900 mb-1">Writing Style</h2>
+          <p className="text-xs text-stone-400 mb-4">Choose how the memo should read.</p>
+          <div className="grid grid-cols-2 gap-3">
+            {/* Bullet Brief */}
+            <button
+              type="button"
+              onClick={() => setTone('bullets')}
+              className={`text-left p-4 rounded-xl border-2 transition-all ${
+                tone === 'bullets'
+                  ? 'border-stone-800 bg-stone-50'
+                  : 'border-stone-200 hover:border-stone-300 hover:bg-stone-50'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-stone-800">Bullet Brief</span>
+                {tone === 'bullets' && (
+                  <span className="w-4 h-4 rounded-full bg-stone-800 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-stone-500 leading-relaxed">Scannable bullets, numbers up front — fast to read and easy to skim in a meeting.</p>
+            </button>
+
+            {/* Full Narrative */}
+            <button
+              type="button"
+              onClick={() => setTone('prose')}
+              className={`text-left p-4 rounded-xl border-2 transition-all ${
+                tone === 'prose'
+                  ? 'border-stone-800 bg-stone-50'
+                  : 'border-stone-200 hover:border-stone-300 hover:bg-stone-50'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-stone-800">Narrative Memo</span>
+                {tone === 'prose' && (
+                  <span className="w-4 h-4 rounded-full bg-stone-800 flex items-center justify-center flex-shrink-0">
+                    <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-stone-500 leading-relaxed">Full sentences with professional IC-ready prose — best for formal presentations.</p>
+            </button>
+          </div>
         </div>
 
         {/* Investment Returns Parameters — shown only when IRA section is selected */}
