@@ -34,7 +34,7 @@ export default function SectionChecklist({
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
-        <h2 className="text-base font-semibold text-stone-900">Choose which sections</h2>
+        <h2 className="text-base font-semibold text-stone-900">Choose Sections</h2>
         <button
           onClick={toggleAll}
           className="text-xs text-blue-600 hover:text-blue-800 font-medium"
