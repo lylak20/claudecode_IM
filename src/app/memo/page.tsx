@@ -68,14 +68,16 @@ export default function MemoPage() {
   const displayCompany = companyName
   const activePhase = historyMode ? 'done' : phase
 
-  // ── Parse memo into segments (markdown / ue-charts / ira) ────────────────
+  // ── Parse memo into segments (markdown / ue-charts / fin-charts / ira) ──────
   type Segment =
     | { type: 'markdown'; text: string }
     | { type: 'ue-charts'; charts: ChartSpec[] }
+    | { type: 'fin-charts'; charts: ChartSpec[] }
     | { type: 'ira'; data: { entryRevenue: number; investmentAmount: number; valuation: number } }
 
   const IRA_RE = /<!--\s*IRA_CALCULATOR:(\{[\s\S]*?\})\s*-->/
   const UE_RE = /<ue-charts>([\s\S]*?)<\/ue-charts>/
+  const FIN_RE = /<fin-charts>([\s\S]*?)<\/fin-charts>/
 
   function parseSegments(text: string): Segment[] {
     const out: Segment[] = []
@@ -84,32 +86,41 @@ export default function MemoPage() {
     while (remaining.length > 0) {
       const iraMatch = IRA_RE.exec(remaining)
       const ueMatch = UE_RE.exec(remaining)
+      const finMatch = FIN_RE.exec(remaining)
 
       const iraIdx = iraMatch ? iraMatch.index : Infinity
       const ueIdx = ueMatch ? ueMatch.index : Infinity
+      const finIdx = finMatch ? finMatch.index : Infinity
 
-      if (ueIdx <= iraIdx && ueMatch) {
-        // UE charts block comes first
-        if (ueMatch.index > 0) out.push({ type: 'markdown', text: remaining.slice(0, ueMatch.index) })
+      const minIdx = Math.min(ueIdx, finIdx, iraIdx)
+
+      if (minIdx === Infinity) {
+        // No more markers
+        out.push({ type: 'markdown', text: remaining })
+        break
+      }
+
+      // Push markdown text before the first marker
+      if (minIdx > 0) out.push({ type: 'markdown', text: remaining.slice(0, minIdx) })
+
+      if (minIdx === ueIdx && ueMatch) {
         try {
           const charts = JSON.parse(ueMatch[1].trim()) as ChartSpec[]
-          if (Array.isArray(charts) && charts.length > 0) {
-            out.push({ type: 'ue-charts', charts })
-          }
-        } catch { /* malformed JSON — skip chart block */ }
+          if (Array.isArray(charts) && charts.length > 0) out.push({ type: 'ue-charts', charts })
+        } catch { /* malformed JSON — skip */ }
         remaining = remaining.slice(ueMatch.index + ueMatch[0].length)
-      } else if (iraIdx < Infinity && iraMatch) {
-        // IRA marker comes first
-        if (iraMatch.index > 0) out.push({ type: 'markdown', text: remaining.slice(0, iraMatch.index) })
+      } else if (minIdx === finIdx && finMatch) {
+        try {
+          const charts = JSON.parse(finMatch[1].trim()) as ChartSpec[]
+          if (Array.isArray(charts) && charts.length > 0) out.push({ type: 'fin-charts', charts })
+        } catch { /* malformed JSON — skip */ }
+        remaining = remaining.slice(finMatch.index + finMatch[0].length)
+      } else if (minIdx === iraIdx && iraMatch) {
         try {
           const data = JSON.parse(iraMatch[1]) as { entryRevenue: number; investmentAmount: number; valuation: number }
           out.push({ type: 'ira', data })
         } catch { /* malformed JSON — skip */ }
         remaining = remaining.slice(iraMatch.index + iraMatch[0].length)
-      } else {
-        // No more markers
-        out.push({ type: 'markdown', text: remaining })
-        break
       }
     }
 
@@ -566,6 +577,9 @@ export default function MemoPage() {
                         }
                         if (seg.type === 'ue-charts') {
                           return <UnitEconomicsCharts key={i} charts={seg.charts} />
+                        }
+                        if (seg.type === 'fin-charts') {
+                          return <UnitEconomicsCharts key={i} charts={seg.charts} label="Financial Charts — auto-generated from uploaded data" />
                         }
                         if (seg.type === 'ira') {
                           return (

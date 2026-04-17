@@ -115,7 +115,34 @@ Determine the business model type first (B2B SaaS → ACV, NRR, CAC, LTV, paybac
       : '',
 
     'Financials': hasFile
-      ? `Analyze from the uploaded financial document: ARR/revenue trajectory (YoY growth), gross margin, EBITDA margin, burn rate, and runway. Then focus on valuation: calculate EV/ARR (current or implied) and compare against the public and private peers from the Competitors section. Is the valuation premium or discount justified by growth rate, margin, or competitive position? State your view clearly.`
+      ? `Analyze from the uploaded financial document. First, output a financial chart block using EXACTLY this XML format:
+
+<fin-charts>
+[
+  {
+    "title": "Chart Title",
+    "type": "bar",
+    "yFormat": "dollarmillions",
+    "labels": ["Jan-25", "Feb-25"],
+    "datasets": [{"label": "ARR", "data": [1.2, 1.8]}]
+  }
+]
+</fin-charts>
+
+CRITICAL: Only include a chart if you found actual numbers in the document. If data is missing, silently omit that chart — no explanation, no mention.
+
+Charts to include (silently skip any without data):
+1. ARR or Revenue trend — bar, yFormat "dollarmillions"
+2. Gross Margin % trend — line, yFormat "percent"
+3. Cash balance or net burn trend — line, yFormat "dollarmillions"
+4. Cash P&L waterfall (for the most recent period with full P&L data) — use type "waterfall", yFormat "dollar". Labels = each P&L line item (e.g. "Revenue", "COGS", "Gross Profit", "S&M", "R&D", "G&A", "Op Profit"). Data = signed dollar values (positive for revenue/inflows, negative for costs). Mark subtotals and totals (Gross Profit, Operating Profit/Loss, Net Income) with "totals": [false, false, true, ...] in the dataset. Example dataset: {"label":"Amount","data":[19435,-20298,-177,-78,-1118,-608,-9660,-828,-1706,-1147,-15067],"totals":[false,false,false,false,true,false,false,false,false,false,true]}
+5. Operating expense breakdown by category — stacked bar, yFormat "dollarmillions"
+6. Revenue vs Costs combo — bars for revenue & cost items, line for gross profit margin, yFormat "dollarmillions" for bars
+
+Output ONLY valid JSON inside the tags — no comments, no trailing commas.
+
+After the chart block, write your text analysis:
+ARR/revenue trajectory (YoY growth), gross margin, EBITDA margin, burn rate, and runway. Then focus on valuation: calculate EV/ARR (current or implied) and compare against the public and private peers from the Competitors section. Is the valuation premium or discount justified by growth rate, margin, or competitive position? State your view clearly.`
       : '',
 
     'Investment Returns Analysis': hasReturnsData
