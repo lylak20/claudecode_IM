@@ -174,6 +174,7 @@ export default function ConfigurePage() {
             onFileParsed={(text) => { setFileContent(text); setFileError('') }}
             onError={(msg) => setFileError(msg)}
           />
+
           {fileError && <p className="mt-2 text-sm text-red-600">{fileError}</p>}
         </div>
 

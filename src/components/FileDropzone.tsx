@@ -3,47 +3,87 @@
 import { useCallback, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 
+interface ParsedFile {
+  name: string
+  text: string
+  status: 'parsing' | 'done' | 'error'
+  error?: string
+}
+
 interface FileDropzoneProps {
-  onFileParsed: (text: string, filename: string) => void
+  onFileParsed: (combinedText: string, filenames: string) => void
   onError: (msg: string) => void
 }
 
 export default function FileDropzone({ onFileParsed, onError }: FileDropzoneProps) {
-  const [uploadedFilename, setUploadedFilename] = useState<string | null>(null)
-  const [isParsing, setIsParsing] = useState(false)
+  const [files, setFiles] = useState<ParsedFile[]>([])
 
-  const onDrop = useCallback(
-    async (acceptedFiles: File[]) => {
-      const file = acceptedFiles[0]
-      if (!file) return
+  // Notify parent whenever the file list changes
+  const notify = useCallback(
+    (updated: ParsedFile[]) => {
+      const done = updated.filter(f => f.status === 'done')
+      const combinedText = done.map(f => `=== ${f.name} ===\n${f.text}`).join('\n\n')
+      const names = done.map(f => f.name).join(', ')
+      onFileParsed(combinedText, names)
+    },
+    [onFileParsed],
+  )
 
-      setIsParsing(true)
-      setUploadedFilename(null)
+  const parseFile = useCallback(
+    async (file: File) => {
+      // Add as "parsing" immediately
+      const entry: ParsedFile = { name: file.name, text: '', status: 'parsing' }
+      setFiles(prev => {
+        // Skip duplicates
+        if (prev.some(f => f.name === file.name)) return prev
+        return [...prev, entry]
+      })
 
       try {
         const formData = new FormData()
         formData.append('file', file)
+        const res = await fetch('/api/parse-file', { method: 'POST', body: formData })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Failed to parse file')
 
-        const response = await fetch('/api/parse-file', {
-          method: 'POST',
-          body: formData,
+        setFiles(prev => {
+          const updated = prev.map(f =>
+            f.name === file.name ? { ...f, text: data.text, status: 'done' as const } : f,
+          )
+          notify(updated)
+          return updated
         })
-
-        const data = await response.json()
-
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to parse file')
-        }
-
-        setUploadedFilename(file.name)
-        onFileParsed(data.text, file.name)
       } catch (err) {
-        onError(err instanceof Error ? err.message : 'Failed to parse file')
-      } finally {
-        setIsParsing(false)
+        const msg = err instanceof Error ? err.message : 'Failed to parse file'
+        setFiles(prev => {
+          const updated = prev.map(f =>
+            f.name === file.name ? { ...f, status: 'error' as const, error: msg } : f,
+          )
+          notify(updated)
+          return updated
+        })
+        onError(`${file.name}: ${msg}`)
       }
     },
-    [onFileParsed, onError]
+    [notify, onError],
+  )
+
+  const onDrop = useCallback(
+    (acceptedFiles: File[]) => {
+      acceptedFiles.forEach(parseFile)
+    },
+    [parseFile],
+  )
+
+  const removeFile = useCallback(
+    (name: string) => {
+      setFiles(prev => {
+        const updated = prev.filter(f => f.name !== name)
+        notify(updated)
+        return updated
+      })
+    },
+    [notify],
   )
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -54,73 +94,115 @@ export default function FileDropzone({ onFileParsed, onError }: FileDropzoneProp
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
       'text/csv': ['.csv'],
     },
-    maxFiles: 1,
+    maxFiles: 10,
     maxSize: 10 * 1024 * 1024,
-    disabled: isParsing,
   })
 
-  const removeFile = () => {
-    setUploadedFilename(null)
-    onFileParsed('', '')
-  }
+  const hasParsing = files.some(f => f.status === 'parsing')
 
   return (
-    <div className="h-full flex flex-col">
-      {uploadedFilename ? (
-        <div className="flex-1 flex flex-col items-center justify-center border-2 border-emerald-300 bg-emerald-50 rounded-xl p-6">
-          <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mb-3">
-            <svg className="w-6 h-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <p className="text-sm font-medium text-emerald-800 text-center mb-1">{uploadedFilename}</p>
-          <p className="text-xs text-emerald-600 mb-4">File parsed successfully</p>
-          <button
-            onClick={removeFile}
-            className="text-xs text-emerald-700 underline hover:text-emerald-900"
-          >
-            Remove file
-          </button>
-        </div>
-      ) : (
-        <div
-          {...getRootProps()}
-          className={`flex-1 flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-6 cursor-pointer transition-all ${
-            isDragActive
-              ? 'border-blue-400 bg-blue-50'
-              : isParsing
-              ? 'border-gray-200 bg-gray-50 cursor-not-allowed'
-              : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100'
-          }`}
-        >
-          <input {...getInputProps()} />
-
-          {isParsing ? (
-            <>
-              <div className="w-10 h-10 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin mb-3" />
-              <p className="text-sm text-gray-600">Parsing file…</p>
-            </>
-          ) : (
-            <>
-              <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center mb-3">
-                <svg className="w-6 h-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-              {isDragActive ? (
-                <p className="text-sm font-medium text-blue-600">Drop file here</p>
-              ) : (
-                <>
-                  <p className="text-sm font-medium text-gray-700 mb-1">
-                    Drag & drop or click to upload
-                  </p>
-                  <p className="text-xs text-gray-400">PDF, Excel, or CSV · max 10 MB</p>
-                </>
+    <div className="space-y-3">
+      {/* File list */}
+      {files.length > 0 && (
+        <ul className="space-y-2">
+          {files.map(f => (
+            <li
+              key={f.name}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border text-sm ${
+                f.status === 'done'
+                  ? 'border-emerald-200 bg-emerald-50'
+                  : f.status === 'error'
+                  ? 'border-red-200 bg-red-50'
+                  : 'border-blue-100 bg-blue-50'
+              }`}
+            >
+              {/* Status icon */}
+              {f.status === 'parsing' && (
+                <div className="w-4 h-4 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin flex-shrink-0" />
               )}
-            </>
-          )}
-        </div>
+              {f.status === 'done' && (
+                <svg className="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+              {f.status === 'error' && (
+                <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+
+              {/* Filename + status text */}
+              <div className="flex-1 min-w-0">
+                <p className={`font-medium truncate ${
+                  f.status === 'done' ? 'text-emerald-800' :
+                  f.status === 'error' ? 'text-red-700' : 'text-blue-700'
+                }`}>
+                  {f.name}
+                </p>
+                {f.status === 'parsing' && (
+                  <p className="text-xs text-blue-500">Parsing…</p>
+                )}
+                {f.status === 'error' && (
+                  <p className="text-xs text-red-500 truncate">{f.error}</p>
+                )}
+                {f.status === 'done' && (
+                  <p className="text-xs text-emerald-600">Parsed successfully</p>
+                )}
+              </div>
+
+              {/* Remove button */}
+              <button
+                onClick={() => removeFile(f.name)}
+                className={`flex-shrink-0 p-0.5 rounded hover:bg-black/10 transition-colors ${
+                  f.status === 'done' ? 'text-emerald-600' :
+                  f.status === 'error' ? 'text-red-500' : 'text-blue-500'
+                }`}
+                title="Remove file"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
+
+      {/* Drop zone — always visible so you can add more files */}
+      <div
+        {...getRootProps()}
+        className={`flex items-center gap-3 border-2 border-dashed rounded-xl px-4 py-3 cursor-pointer transition-all ${
+          isDragActive
+            ? 'border-blue-400 bg-blue-50'
+            : hasParsing
+            ? 'border-gray-200 bg-gray-50 cursor-wait'
+            : files.length > 0
+            ? 'border-stone-200 bg-stone-50 hover:border-stone-300 hover:bg-stone-100'
+            : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100'
+        }`}
+      >
+        <input {...getInputProps()} />
+
+        {isDragActive ? (
+          <p className="text-sm font-medium text-blue-600">Drop files here</p>
+        ) : (
+          <>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+              files.length > 0 ? 'bg-stone-200' : 'bg-gray-200'
+            }`}>
+              <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-700">
+                {files.length > 0 ? 'Add another file' : 'Drag & drop or click to upload'}
+              </p>
+              <p className="text-xs text-gray-400">PDF, Excel, or CSV · max 10 MB each</p>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
