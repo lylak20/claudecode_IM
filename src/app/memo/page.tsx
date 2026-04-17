@@ -242,6 +242,14 @@ export default function MemoPage() {
     }
   }, [phase, memoText, companyName, historySaved, historyMode])
 
+  // Auto-enter edit mode once streaming finishes (so memo is immediately editable)
+  useEffect(() => {
+    if (phase === 'done' && memoText && !historyMode && !isEditing) {
+      setEditText(memoText)
+      setIsEditing(true)
+    }
+  }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── CSS Custom Highlight helper (Chrome/Edge ≥ 105) ──────────────────────
   const applyCSSHighlight = useCallback((range: Range) => {
     if (typeof CSS === 'undefined' || !('highlights' in CSS)) return
@@ -469,7 +477,7 @@ export default function MemoPage() {
                             onClick={handleCancelEdit}
                             className="px-3 py-1 text-xs text-stone-500 hover:text-stone-800 border border-stone-200 rounded-md hover:bg-white transition-colors"
                           >
-                            Cancel
+                            Preview
                           </button>
                           <button
                             onClick={handleSaveEdit}
@@ -478,13 +486,13 @@ export default function MemoPage() {
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                             </svg>
-                            Save changes
+                            Save
                           </button>
                         </div>
                       </>
                     ) : (
                       <>
-                        <span className="text-xs text-stone-400">Click <strong>Edit</strong> to make changes directly in the memo</span>
+                        <span className="text-xs text-stone-400">Previewing rendered memo</span>
                         <button
                           onClick={handleStartEdit}
                           className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-stone-600 border border-stone-200 rounded-md hover:bg-white hover:border-stone-300 transition-colors"
