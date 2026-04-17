@@ -253,6 +253,42 @@ function sanitizeSpec(spec: ChartSpec): ChartSpec {
   }
 }
 
+// ── SingleChart — renders one spec; lives inside ChartErrorBoundary ──────────
+
+function SingleChart({ spec, isOnly }: { spec: ChartSpec; isOnly: boolean }) {
+  const isWaterfall = spec.type === 'waterfall'
+  const isCohort =
+    spec.type === 'line' &&
+    spec.datasets.length >= 3 &&
+    spec.datasets.every(d => !d.chartType || d.chartType === 'line')
+  const isWide = isWaterfall || isCohort || isOnly || spec.labels.length >= 6
+  const height = isWaterfall ? 280 : isCohort ? 260 : 220
+
+  // toChartConfig runs inside this component's render → caught by ChartErrorBoundary
+  const config = toChartConfig(spec)
+
+  return (
+    <div className={`bg-white border border-gray-200 rounded-xl p-4 shadow-sm ${isWide ? 'col-span-2' : ''}`}>
+      <p className="text-xs font-semibold text-gray-600 mb-2">{spec.title}</p>
+
+      {isWaterfall && (
+        <div className="flex items-center gap-4 mb-2">
+          {[['#1e4d8c', 'Increase'], ['#e07b39', 'Decrease'], ['#2d7a3c', 'Total']].map(([color, lbl]) => (
+            <span key={lbl} className="flex items-center gap-1 text-xs text-gray-500">
+              <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: color }} />
+              {lbl}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div style={{ height }}>
+        <ChartRenderer config={config} />
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 interface Props {
@@ -277,43 +313,11 @@ export default function UnitEconomicsCharts({ charts, label }: Props) {
       </div>
 
       <div className={`grid gap-4 ${charts.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
-        {charts.map((rawSpec, i) => {
-          const spec = sanitizeSpec(rawSpec)
-          const isWaterfall = spec.type === 'waterfall'
-          const isCohort =
-            spec.type === 'line' &&
-            spec.datasets.length >= 3 &&
-            spec.datasets.every(d => !d.chartType || d.chartType === 'line')
-          // Wide: waterfall, cohort, peer charts (many labels), or solo
-          const isWide = isWaterfall || isCohort || charts.length === 1 || spec.labels.length >= 6
-          const height = isWaterfall ? 280 : isCohort ? 260 : 220
-
-          return (
-            <ChartErrorBoundary key={i}>
-              <div
-                className={`bg-white border border-gray-200 rounded-xl p-4 shadow-sm ${isWide ? 'col-span-2' : ''}`}
-              >
-                <p className="text-xs font-semibold text-gray-600 mb-2">{spec.title}</p>
-
-                {/* Waterfall legend */}
-                {isWaterfall && (
-                  <div className="flex items-center gap-4 mb-2">
-                    {[['#1e4d8c', 'Increase'], ['#e07b39', 'Decrease'], ['#2d7a3c', 'Total']].map(([color, lbl]) => (
-                      <span key={lbl} className="flex items-center gap-1 text-xs text-gray-500">
-                        <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: color }} />
-                        {lbl}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                <div style={{ height }}>
-                  <ChartRenderer config={toChartConfig(spec)} />
-                </div>
-              </div>
-            </ChartErrorBoundary>
-          )
-        })}
+        {charts.map((rawSpec, i) => (
+          <ChartErrorBoundary key={i}>
+            <SingleChart spec={sanitizeSpec(rawSpec)} isOnly={charts.length === 1} />
+          </ChartErrorBoundary>
+        ))}
       </div>
     </div>
   )

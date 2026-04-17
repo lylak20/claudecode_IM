@@ -12,6 +12,8 @@ import {
   Tooltip,
   Legend,
   Filler,
+  LineController,
+  BarController,
 } from 'chart.js'
 import { Chart } from 'react-chartjs-2'
 
@@ -25,7 +27,9 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
-  Filler
+  Filler,
+  LineController,
+  BarController,
 )
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
