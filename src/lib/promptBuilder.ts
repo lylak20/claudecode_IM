@@ -49,7 +49,31 @@ Include a bottom-up sanity check where possible: e.g., "[# of target users] × [
 Include 5–8 direct competitors. Pull data from the research (news, Reddit, HN, company websites). For Key Insight: write 1–2 short bullet points (no full sentences) capturing something material from recent news — e.g. "• Pivoted to enterprise in 2024 • Lost key AI partnership". Use N/A for any cell where data is not available in the research — do not guess or fabricate figures.`,
 
     'Unit Economics': hasFile
-      ? `Analyze from the uploaded financial document. Determine the business model type first (B2B SaaS → ACV, NRR, CAC, LTV, payback period; B2C → ARPU, DAU/MAU, retention, CAC). Report all available metrics with exact figures from the file. Flag any missing key metrics and explain why they matter for underwriting.`
+      ? `Analyze from the uploaded financial document. First, output a chart data block using EXACTLY this XML format — valid JSON array inside the tags:
+
+<ue-charts>
+[
+  {
+    "title": "Chart Title Here",
+    "type": "line",
+    "yFormat": "dollarmillions",
+    "labels": ["Jan-25", "Feb-25"],
+    "datasets": [{"label": "Revenue", "data": [1.2, 1.8]}]
+  }
+]
+</ue-charts>
+
+Rules for the chart block:
+- Include up to 6 charts. Only include charts where you have actual data from the document — no invented numbers.
+- Chart types: "line" for time-series trends, "bar" for comparisons. For combo charts (bars + line overlay), set top-level "type":"bar" and add "chartType":"line" on the overlay dataset.
+- yFormat options: "dollarmillions" ($M), "dollar" ($), "percent" (%), "thousands" (K), "number" (plain).
+- For stacked charts: add "stacked": true.
+- Labels should be short date strings (e.g. "Mar-25", "Q1-25") or category names.
+- Prioritize: (1) Revenue/MRR trend, (2) ARPU or revenue per user, (3) User/customer growth or breakdown by segment, (4) Gross profit & margins, (5) B2B vs B2C split, (6) Any other key metric with time-series data.
+- Output ONLY valid JSON inside the tags — no comments, no trailing commas.
+
+After the chart block, write your text analysis:
+Determine the business model type first (B2B SaaS → ACV, NRR, CAC, LTV, payback period; B2C → ARPU, DAU/MAU, retention, CAC). Report all available metrics with exact figures from the file. Flag any missing key metrics and explain why they matter for underwriting.`
       : '',
 
     'Financials': hasFile

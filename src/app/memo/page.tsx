@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { useMemoStream } from '@/hooks/useMemoStream'
 import MemoDisplay from '@/components/MemoDisplay'
 import IRACalculator from '@/components/IRACalculator'
+import UnitEconomicsCharts from '@/components/UnitEconomicsCharts'
+import type { ChartSpec } from '@/components/UnitEconomicsCharts'
 import HistorySidebar from '@/components/HistorySidebar'
 import AiChat from '@/components/AiChat'
 import DataAssistant from '@/components/DataAssistant'
@@ -66,21 +68,55 @@ export default function MemoPage() {
   const displayCompany = companyName
   const activePhase = historyMode ? 'done' : phase
 
-  // ── Parse IRA marker from memo text ──────────────────────────────────────
-  const IRA_RE = /<!--\s*IRA_CALCULATOR:(\{[\s\S]*?\})\s*-->/
-  const iraMatch = displayText.match(IRA_RE)
-  let beforeIRA = displayText
-  let afterIRA = ''
-  let iraParams: { entryRevenue: number; investmentAmount: number; valuation: number } | null = null
+  // ── Parse memo into segments (markdown / ue-charts / ira) ────────────────
+  type Segment =
+    | { type: 'markdown'; text: string }
+    | { type: 'ue-charts'; charts: ChartSpec[] }
+    | { type: 'ira'; data: { entryRevenue: number; investmentAmount: number; valuation: number } }
 
-  if (iraMatch) {
-    try {
-      iraParams = JSON.parse(iraMatch[1])
-    } catch { /* malformed JSON — ignore */ }
-    const idx = displayText.indexOf(iraMatch[0])
-    beforeIRA = displayText.slice(0, idx)
-    afterIRA = displayText.slice(idx + iraMatch[0].length)
+  const IRA_RE = /<!--\s*IRA_CALCULATOR:(\{[\s\S]*?\})\s*-->/
+  const UE_RE = /<ue-charts>([\s\S]*?)<\/ue-charts>/
+
+  function parseSegments(text: string): Segment[] {
+    const out: Segment[] = []
+    let remaining = text
+
+    while (remaining.length > 0) {
+      const iraMatch = IRA_RE.exec(remaining)
+      const ueMatch = UE_RE.exec(remaining)
+
+      const iraIdx = iraMatch ? iraMatch.index : Infinity
+      const ueIdx = ueMatch ? ueMatch.index : Infinity
+
+      if (ueIdx <= iraIdx && ueMatch) {
+        // UE charts block comes first
+        if (ueMatch.index > 0) out.push({ type: 'markdown', text: remaining.slice(0, ueMatch.index) })
+        try {
+          const charts = JSON.parse(ueMatch[1].trim()) as ChartSpec[]
+          if (Array.isArray(charts) && charts.length > 0) {
+            out.push({ type: 'ue-charts', charts })
+          }
+        } catch { /* malformed JSON — skip chart block */ }
+        remaining = remaining.slice(ueMatch.index + ueMatch[0].length)
+      } else if (iraIdx < Infinity && iraMatch) {
+        // IRA marker comes first
+        if (iraMatch.index > 0) out.push({ type: 'markdown', text: remaining.slice(0, iraMatch.index) })
+        try {
+          const data = JSON.parse(iraMatch[1]) as { entryRevenue: number; investmentAmount: number; valuation: number }
+          out.push({ type: 'ira', data })
+        } catch { /* malformed JSON — skip */ }
+        remaining = remaining.slice(iraMatch.index + iraMatch[0].length)
+      } else {
+        // No more markers
+        out.push({ type: 'markdown', text: remaining })
+        break
+      }
+    }
+
+    return out
   }
+
+  const segments = parseSegments(displayText)
 
   // Auto-grow textarea height as content changes
   useEffect(() => {
@@ -514,36 +550,35 @@ export default function MemoPage() {
                     />
                   )}
 
-                  {/* Read mode: rendered markdown — split at IRA marker */}
+                  {/* Read mode: render segments (markdown / charts / IRA calculator) */}
                   {!isEditing && displayText && (
                     <>
-                      {/* Part 1: everything before the IRA calculator marker */}
-                      <MemoDisplay
-                        text={beforeIRA}
-                        isStreaming={!historyMode && isStreaming && !iraParams}
-                      />
-
-                      {/* Part 2: interactive IRA calculator (replaces AI-generated tables) */}
-                      {iraParams && (
-                        <IRACalculator
-                          investmentAmount={Number(iraParams.investmentAmount)}
-                          preMoneyValuation={Number(iraParams.valuation)}
-                          entryRevenue={Number(iraParams.entryRevenue)}
-                        />
-                      )}
-
-                      {/* Part 3: rest of memo after IRA section */}
-                      {iraParams && afterIRA.trim() && (
-                        <MemoDisplay
-                          text={afterIRA}
-                          isStreaming={!historyMode && isStreaming}
-                        />
-                      )}
-
-                      {/* If still streaming and no IRA yet, show cursor on first part */}
-                      {!iraParams && !historyMode && isStreaming && (
-                        <span className="inline-block w-2 h-5 bg-gray-400 animate-pulse ml-0.5 align-middle" />
-                      )}
+                      {segments.map((seg, i) => {
+                        if (seg.type === 'markdown') {
+                          const isLast = i === segments.length - 1
+                          return (
+                            <MemoDisplay
+                              key={i}
+                              text={seg.text}
+                              isStreaming={isLast && !historyMode && isStreaming}
+                            />
+                          )
+                        }
+                        if (seg.type === 'ue-charts') {
+                          return <UnitEconomicsCharts key={i} charts={seg.charts} />
+                        }
+                        if (seg.type === 'ira') {
+                          return (
+                            <IRACalculator
+                              key={i}
+                              investmentAmount={Number(seg.data.investmentAmount)}
+                              preMoneyValuation={Number(seg.data.valuation)}
+                              entryRevenue={Number(seg.data.entryRevenue)}
+                            />
+                          )
+                        }
+                        return null
+                      })}
                     </>
                   )}
                 </div>
