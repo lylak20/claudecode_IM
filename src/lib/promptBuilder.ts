@@ -57,6 +57,7 @@ Include 5–8 direct competitors. Pull data from the research (news, Reddit, HN,
     "title": "Chart Title Here",
     "type": "line",
     "yFormat": "dollarmillions",
+    "xLabel": "optional x-axis label",
     "labels": ["Jan-25", "Feb-25"],
     "datasets": [{"label": "Revenue", "data": [1.2, 1.8]}]
   }
@@ -64,12 +65,20 @@ Include 5–8 direct competitors. Pull data from the research (news, Reddit, HN,
 </ue-charts>
 
 Rules for the chart block:
-- Include up to 6 charts. Only include charts where you have actual data from the document — no invented numbers.
-- Chart types: "line" for time-series trends, "bar" for comparisons. For combo charts (bars + line overlay), set top-level "type":"bar" and add "chartType":"line" on the overlay dataset.
+- Include up to 8 charts. Only include charts where you have actual data from the document — no invented numbers.
+- Chart types: "line" for trends, "bar" for monthly comparisons. For combo charts (bars + line overlay), set top-level "type":"bar" and add "chartType":"line" on the line dataset.
 - yFormat options: "dollarmillions" ($M), "dollar" ($), "percent" (%), "thousands" (K), "number" (plain).
-- For stacked charts: add "stacked": true.
+- For stacked bar charts: add "stacked": true.
 - Labels should be short date strings (e.g. "Mar-25", "Q1-25") or category names.
-- Prioritize: (1) Revenue/MRR trend, (2) ARPU or revenue per user, (3) User/customer growth or breakdown by segment, (4) Gross profit & margins, (5) B2B vs B2C split, (6) Any other key metric with time-series data.
+- Prioritize these charts (include all that have data):
+  1. Revenue / MRR trend — bar or line, yFormat "dollarmillions"
+  2. ARPU or revenue per user over time — line, yFormat "dollar"
+  3. User / customer count or breakdown by segment — bar with stacked:true if segments exist
+  4. Engagement metric per user (e.g. videos/generations/sessions per user) — bar, yFormat "number"
+  5. Retention cohort curves — IMPORTANT: if cohort retention data exists (% of users retained over months), output it as a multi-line chart where each dataset is one cohort (labeled by acquisition month e.g. "Apr-25"), x-axis labels are ["1","2","3","4"...] (months since acquisition), yFormat "percent", xLabel "Months Since Acquisition". All cohorts start at 100.
+  6. Gross profit & margin trend — combo bar+line, yFormat "dollarmillions" for bars (revenue, cost), "percent" for margin line
+  7. B2B vs B2C or channel split — stacked bar
+  8. Any other meaningful time-series metric from the data
 - Output ONLY valid JSON inside the tags — no comments, no trailing commas.
 
 After the chart block, write your text analysis:

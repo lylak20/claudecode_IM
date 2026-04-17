@@ -19,6 +19,7 @@ export interface ChartSpec {
   type: 'line' | 'bar'
   stacked?: boolean
   yLabel?: string
+  xLabel?: string
   yFormat?: 'dollar' | 'dollarmillions' | 'percent' | 'number' | 'thousands'
   labels: string[]
   datasets: {
@@ -39,27 +40,45 @@ const PALETTE = [
   '#c0392b', // red
 ]
 
+// Blue gradient for cohort/retention charts (many datasets, all lines)
+// Goes from dark navy → light sky blue, matching the screenshot style
+function cohortBlue(idx: number, total: number): string {
+  // Newest cohort = darkest, oldest = lightest
+  const t = total <= 1 ? 0 : idx / (total - 1)
+  // Interpolate: dark #1e4d8c → light #a8d4f0
+  const r = Math.round(0x1e + t * (0xa8 - 0x1e))
+  const g = Math.round(0x4d + t * (0xd4 - 0x4d))
+  const b = Math.round(0x8c + t * (0xf0 - 0x8c))
+  return `rgb(${r},${g},${b})`
+}
+
 // ── Convert compact ChartSpec → full Chart.js v4 config ──────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toChartConfig(spec: ChartSpec): Record<string, any> {
   const hasMixed = spec.datasets.some(d => d.chartType && d.chartType !== spec.type)
 
+  // Detect cohort/retention chart: all datasets are lines, >= 3 datasets
+  const allLines = spec.type === 'line' && spec.datasets.every(d => !d.chartType || d.chartType === 'line')
+  const isCohort = allLines && spec.datasets.length >= 3
+
+  const n = spec.datasets.length
   const datasets = spec.datasets.map((ds, i) => {
-    const color = PALETTE[i % PALETTE.length]
     const effectiveType = ds.chartType ?? spec.type
     const isLine = effectiveType === 'line'
+    // Use blue gradient for cohort charts, otherwise standard palette
+    const color = isCohort ? cohortBlue(i, n) : PALETTE[i % PALETTE.length]
 
     return {
-      type: hasMixed ? effectiveType : undefined, // only set per-dataset type for mixed charts
+      type: hasMixed ? effectiveType : undefined,
       label: ds.label,
       data: ds.data,
-      backgroundColor: isLine ? color + '22' : color,
+      backgroundColor: isLine ? color + '18' : color,
       borderColor: color,
-      borderWidth: isLine ? 2.5 : 0,
-      pointRadius: isLine ? 3 : 0,
-      pointHoverRadius: isLine ? 5 : 0,
-      tension: isLine ? 0.3 : 0,
+      borderWidth: isLine ? (isCohort ? 2 : 2.5) : 0,
+      pointRadius: isLine ? (isCohort ? 0 : 3) : 0,  // no dots on cohort lines = cleaner
+      pointHoverRadius: isLine ? 4 : 0,
+      tension: isLine ? 0.2 : 0,
       fill: false,
       yAxisID: hasMixed && i > 0 && isLine ? 'y1' : 'y',
     }
@@ -81,6 +100,9 @@ function toChartConfig(spec: ChartSpec): Record<string, any> {
       stacked: spec.stacked,
       grid: { display: false },
       ticks: { font: { size: 10 }, maxRotation: 45, minRotation: 0 },
+      title: spec.xLabel
+        ? { display: true, text: spec.xLabel, font: { size: 10 }, color: '#9ca3af' }
+        : { display: false },
     },
     y: {
       stacked: spec.stacked,
@@ -104,7 +126,7 @@ function toChartConfig(spec: ChartSpec): Record<string, any> {
   }
 
   return {
-    type: hasMixed ? 'bar' : spec.type, // base type for mixed charts must be 'bar'
+    type: hasMixed ? 'bar' : spec.type,
     data: { labels: spec.labels, datasets },
     options: {
       responsive: true,
@@ -145,19 +167,26 @@ export default function UnitEconomicsCharts({ charts }: { charts: ChartSpec[] })
 
       {/* 2-column grid */}
       <div className={`grid gap-4 ${charts.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
-        {charts.map((spec, i) => (
-          <div
-            key={i}
-            className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm"
-          >
-            {/* Chart title */}
-            <p className="text-xs font-semibold text-gray-600 mb-3">{spec.title}</p>
-            {/* Chart */}
-            <div style={{ height: 200 }}>
-              <ChartRenderer config={toChartConfig(spec)} />
+        {charts.map((spec, i) => {
+          // Cohort/retention charts: many line datasets → taller + full width for readability
+          const isCohort = spec.type === 'line' && spec.datasets.length >= 3
+            && spec.datasets.every(d => !d.chartType || d.chartType === 'line')
+          const isWide = isCohort || charts.length === 1
+
+          return (
+            <div
+              key={i}
+              className={`bg-white border border-gray-200 rounded-xl p-4 shadow-sm ${isWide ? 'col-span-2' : ''}`}
+            >
+              {/* Chart title */}
+              <p className="text-xs font-semibold text-gray-600 mb-3">{spec.title}</p>
+              {/* Chart — taller for cohort/wide charts */}
+              <div style={{ height: isCohort ? 260 : 200 }}>
+                <ChartRenderer config={toChartConfig(spec)} />
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
