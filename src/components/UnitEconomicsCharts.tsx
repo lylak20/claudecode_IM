@@ -2,7 +2,6 @@
 
 import dynamic from 'next/dynamic'
 
-// Chart.js — dynamic import avoids SSR issues
 const ChartRenderer = dynamic(() => import('./ChartRenderer'), {
   ssr: false,
   loading: () => (
@@ -14,20 +13,25 @@ const ChartRenderer = dynamic(() => import('./ChartRenderer'), {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+export interface ChartDataset {
+  label: string
+  data: number[]
+  chartType?: 'line' | 'bar'  // for mixed combo charts
+  totals?: boolean[]           // waterfall: mark subtotal/total bars (green)
+  colors?: string[]            // per-bar custom colors (e.g. gray for target company)
+  isDashed?: boolean           // dashed line (e.g. average reference line)
+  lineColor?: string           // custom color override for this dataset
+}
+
 export interface ChartSpec {
   title: string
   type: 'line' | 'bar' | 'waterfall'
   stacked?: boolean
   yLabel?: string
   xLabel?: string
-  yFormat?: 'dollar' | 'dollarmillions' | 'percent' | 'number' | 'thousands'
+  yFormat?: 'dollar' | 'dollarmillions' | 'dollarbillions' | 'percent' | 'number' | 'thousands' | 'multiple'
   labels: string[]
-  datasets: {
-    label: string
-    data: number[]
-    chartType?: 'line' | 'bar'  // for combo (mixed) charts
-    totals?: boolean[]           // waterfall: which bars are subtotal/total (shown in green)
-  }[]
+  datasets: ChartDataset[]
 }
 
 // ── Color palette ─────────────────────────────────────────────────────────────
@@ -41,7 +45,6 @@ const PALETTE = [
   '#c0392b', // red
 ]
 
-// Blue gradient for cohort retention charts (dark → light per dataset)
 function cohortBlue(idx: number, total: number): string {
   const t = total <= 1 ? 0 : idx / (total - 1)
   const r = Math.round(0x1e + t * (0xa8 - 0x1e))
@@ -56,20 +59,18 @@ function makeFmt(yFormat: ChartSpec['yFormat']) {
   return (v: number): string => {
     switch (yFormat) {
       case 'dollar':
-        return v >= 0
-          ? `$${Math.abs(v).toLocaleString()}`
-          : `($${Math.abs(v).toLocaleString()})`
+        return v >= 0 ? `$${Math.abs(v).toLocaleString()}` : `($${Math.abs(v).toLocaleString()})`
       case 'dollarmillions': return `$${v}M`
+      case 'dollarbillions': return `$${v}B`
       case 'percent': return `${v}%`
       case 'thousands': return `${v}K`
+      case 'multiple': return `${v}x`
       default: return String(v)
     }
   }
 }
 
-// ── Waterfall chart config ────────────────────────────────────────────────────
-// Each item shown as a bar from 0 to its value (+ or −).
-// Blue = positive increment, Orange = negative, Green = subtotal/total.
+// ── Waterfall config ──────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toWaterfallConfig(spec: ChartSpec): Record<string, any> {
@@ -79,35 +80,29 @@ function toWaterfallConfig(spec: ChartSpec): Record<string, any> {
   const fmt = makeFmt(spec.yFormat)
 
   const colors = values.map((v, i) => {
-    if (isTotals[i]) return '#2d7a3c'   // green for totals
-    return v >= 0 ? '#1e4d8c' : '#e07b39' // navy / orange
+    if (isTotals[i]) return '#2d7a3c'
+    return v >= 0 ? '#1e4d8c' : '#e07b39'
   })
 
   return {
     type: 'bar',
     data: {
       labels: spec.labels,
-      datasets: [
-        {
-          label: ds.label || 'Amount',
-          data: values,
-          backgroundColor: colors,
-          borderWidth: 0,
-          borderRadius: 2,
-        },
-      ],
+      datasets: [{
+        label: ds.label || 'Amount',
+        data: values,
+        backgroundColor: colors,
+        borderWidth: 0,
+        borderRadius: 2,
+      }],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: {
-          callbacks: {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            label: (ctx: any) => ` ${fmt(ctx.raw as number)}`,
-          },
-        },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        tooltip: { callbacks: { label: (ctx: any) => ` ${fmt(ctx.raw as number)}` } },
       },
       scales: {
         x: {
@@ -124,7 +119,7 @@ function toWaterfallConfig(spec: ChartSpec): Record<string, any> {
   }
 }
 
-// ── Standard chart config (line / bar / combo) ────────────────────────────────
+// ── Standard / combo / peer chart config ─────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toChartConfig(spec: ChartSpec): Record<string, any> {
@@ -136,23 +131,44 @@ function toChartConfig(spec: ChartSpec): Record<string, any> {
   const n = spec.datasets.length
   const fmt = makeFmt(spec.yFormat)
 
+  // Second axis formatter — right-side axis for combo charts uses the second dataset's format
+  // (for peer charts the right axis is ARR in $M)
+  const fmt2 = makeFmt('dollarmillions')
+
   const datasets = spec.datasets.map((ds, i) => {
     const effectiveType = ds.chartType ?? spec.type
     const isLine = effectiveType === 'line'
-    const color = isCohort ? cohortBlue(i, n) : PALETTE[i % PALETTE.length]
+
+    // Color precedence: explicit lineColor > cohort gradient > palette
+    const baseColor = ds.lineColor
+      ?? (isCohort ? cohortBlue(i, n) : PALETTE[i % PALETTE.length])
+
+    // Per-bar colors array (e.g. mixed navy/gray in peer charts)
+    const bgColor = ds.colors
+      ? ds.colors
+      : isLine ? baseColor + '18' : baseColor
+
+    const borderColor = ds.colors
+      ? ds.colors
+      : baseColor
+
+    // Which y-axis: second dataset in a mixed chart uses y1
+    const useY1 = hasMixed && i > 0 && isLine
 
     return {
       type: hasMixed ? effectiveType : undefined,
       label: ds.label,
       data: ds.data,
-      backgroundColor: isLine ? color + '18' : color,
-      borderColor: color,
+      backgroundColor: bgColor,
+      borderColor: borderColor,
       borderWidth: isLine ? (isCohort ? 2 : 2.5) : 0,
-      pointRadius: isLine ? (isCohort ? 0 : 3) : 0,
-      pointHoverRadius: isLine ? 4 : 0,
+      borderDash: ds.isDashed ? [6, 4] : [],
+      pointRadius: isLine ? (isCohort ? 0 : 4) : 0,
+      pointHoverRadius: isLine ? 5 : 0,
       tension: isLine ? 0.2 : 0,
       fill: false,
-      yAxisID: hasMixed && i > 0 && isLine ? 'y1' : 'y',
+      yAxisID: useY1 ? 'y1' : 'y',
+      borderRadius: isLine ? 0 : 3,
     }
   })
 
@@ -176,12 +192,16 @@ function toChartConfig(spec: ChartSpec): Record<string, any> {
     },
   }
 
+  // Second y-axis (right) for combo / peer charts
   if (hasMixed) {
+    const rightDataset = spec.datasets.find((d, i) => i > 0 && (d.chartType === 'line' || spec.type === 'line'))
+    const rightFmt = rightDataset?.lineColor === '#ef4444' ? fmt2 : fmt // ARR axis uses $M
     scales.y1 = {
       position: 'right',
       grid: { drawOnChartArea: false },
       border: { display: false },
-      ticks: { font: { size: 10 }, callback: fmt },
+      ticks: { font: { size: 10 }, callback: rightFmt, color: '#ef4444' },
+      title: { display: true, text: 'Est. ARR ($M)', font: { size: 9 }, color: '#ef4444' },
     }
   }
 
@@ -200,8 +220,10 @@ function toChartConfig(spec: ChartSpec): Record<string, any> {
         },
         tooltip: {
           callbacks: {
-            label: (ctx: { dataset: { label: string }; parsed: { y: number } }) =>
-              ` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`,
+            label: (ctx: { dataset: { label: string; yAxisID?: string }; parsed: { y: number } }) => {
+              const f = ctx.dataset.yAxisID === 'y1' ? fmt2 : fmt
+              return ` ${ctx.dataset.label}: ${f(ctx.parsed.y)}`
+            },
           },
         },
       },
@@ -214,7 +236,7 @@ function toChartConfig(spec: ChartSpec): Record<string, any> {
 
 interface Props {
   charts: ChartSpec[]
-  label?: string  // header label, e.g. "Financial Charts" vs "Unit Economics Charts"
+  label?: string
 }
 
 export default function UnitEconomicsCharts({ charts, label }: Props) {
@@ -222,17 +244,17 @@ export default function UnitEconomicsCharts({ charts, label }: Props) {
 
   return (
     <div className="my-4">
-      {/* Section label */}
       <div className="flex items-center gap-2 mb-3">
         <svg className="w-4 h-4 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+          />
         </svg>
         <span className="text-xs font-semibold text-stone-400 uppercase tracking-wider">
           {label ?? 'Charts — auto-generated from uploaded data'}
         </span>
       </div>
 
-      {/* 2-column grid */}
       <div className={`grid gap-4 ${charts.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
         {charts.map((spec, i) => {
           const isWaterfall = spec.type === 'waterfall'
@@ -240,18 +262,18 @@ export default function UnitEconomicsCharts({ charts, label }: Props) {
             spec.type === 'line' &&
             spec.datasets.length >= 3 &&
             spec.datasets.every(d => !d.chartType || d.chartType === 'line')
-          // Wide: waterfall, cohort, or solo chart
-          const isWide = isWaterfall || isCohort || charts.length === 1
-          // Taller for waterfall (many x labels) and cohort
-          const height = isWaterfall ? 280 : isCohort ? 260 : 200
+          // Wide: waterfall, cohort, peer charts (many labels), or solo
+          const isWide = isWaterfall || isCohort || charts.length === 1 || spec.labels.length >= 6
+          const height = isWaterfall ? 280 : isCohort ? 260 : 220
 
           return (
             <div
               key={i}
               className={`bg-white border border-gray-200 rounded-xl p-4 shadow-sm ${isWide ? 'col-span-2' : ''}`}
             >
-              <p className="text-xs font-semibold text-gray-600 mb-3">{spec.title}</p>
-              {/* Waterfall legend (manual, since we share one dataset with mixed colors) */}
+              <p className="text-xs font-semibold text-gray-600 mb-2">{spec.title}</p>
+
+              {/* Waterfall legend */}
               {isWaterfall && (
                 <div className="flex items-center gap-4 mb-2">
                   {[['#1e4d8c', 'Increase'], ['#e07b39', 'Decrease'], ['#2d7a3c', 'Total']].map(([color, lbl]) => (
@@ -262,6 +284,7 @@ export default function UnitEconomicsCharts({ charts, label }: Props) {
                   ))}
                 </div>
               )}
+
               <div style={{ height }}>
                 <ChartRenderer config={toChartConfig(spec)} />
               </div>

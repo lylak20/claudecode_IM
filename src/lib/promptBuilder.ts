@@ -141,7 +141,64 @@ Charts to include (silently skip any without data):
 
 Output ONLY valid JSON inside the tags — no comments, no trailing commas.
 
-After the chart block, write your text analysis:
+After the fin-charts block, output a peer valuation chart block. Use the competitor companies already identified in the Competitors section research. For each competitor, look through the research data for their valuation and ARR/revenue:
+
+<peer-charts>
+[
+  {
+    "title": "EV / Revenue Multiple of Peers",
+    "type": "bar",
+    "yFormat": "multiple",
+    "yLabel": "EV / Revenue Multiple (x)",
+    "labels": ["Peer1", "Peer2", ..., "TARGET_COMPANY (cARR $XM)"],
+    "datasets": [
+      {
+        "label": "EV/Revenue",
+        "data": [67, 150, ..., 13],
+        "colors": ["#1e4d8c", "#1e4d8c", ..., "#9ca3af"]
+      },
+      {
+        "label": "Average",
+        "data": [AVG, AVG, ..., AVG],
+        "chartType": "line",
+        "isDashed": true,
+        "lineColor": "#ef4444"
+      }
+    ]
+  },
+  {
+    "title": "Valuation ($B) and ARR ($M) of Peers",
+    "type": "bar",
+    "yFormat": "dollarbillions",
+    "yLabel": "Latest Valuation ($B)",
+    "labels": ["Peer1", "Peer2", ..., "TARGET_COMPANY"],
+    "datasets": [
+      {
+        "label": "Latest Valuation ($B)",
+        "data": [10, 4.5, ..., 0.5],
+        "colors": ["#1e4d8c", "#1e4d8c", ..., "#9ca3af"]
+      },
+      {
+        "label": "Est. ARR ($M)",
+        "data": [155, 30, ..., 5],
+        "chartType": "line",
+        "lineColor": "#ef4444"
+      }
+    ]
+  }
+]
+</peer-charts>
+
+CRITICAL rules for peer charts:
+- ONLY include a company if you found its valuation OR ARR in the research data. Silently skip companies with no data — no mention anywhere.
+- If fewer than 2 companies have any data at all, output: <peer-charts>[]</peer-charts>
+- The target company (the one being analyzed) goes LAST in the labels array, shown in gray (#9ca3af). Label it as "CompanyName (cARR $XM)" if ARR is known. Use its post-money valuation from the investment inputs if provided.
+- EV/Revenue = valuation / ARR. Only include this chart if you can compute it for at least 2 companies.
+- For the average dashed line: compute average of peers only (exclude the target company from the average). The "data" array must repeat the same average value for every label position.
+- "colors" array must have one color string per label, matching the labels array length exactly.
+- Output ONLY valid JSON — no comments, no trailing commas.
+
+After the peer-charts block, write your text analysis:
 ARR/revenue trajectory (YoY growth), gross margin, EBITDA margin, burn rate, and runway. Then focus on valuation: calculate EV/ARR (current or implied) and compare against the public and private peers from the Competitors section. Is the valuation premium or discount justified by growth rate, margin, or competitive position? State your view clearly.`
       : '',
 

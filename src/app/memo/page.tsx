@@ -73,11 +73,13 @@ export default function MemoPage() {
     | { type: 'markdown'; text: string }
     | { type: 'ue-charts'; charts: ChartSpec[] }
     | { type: 'fin-charts'; charts: ChartSpec[] }
+    | { type: 'peer-charts'; charts: ChartSpec[] }
     | { type: 'ira'; data: { entryRevenue: number; investmentAmount: number; valuation: number } }
 
   const IRA_RE = /<!--\s*IRA_CALCULATOR:(\{[\s\S]*?\})\s*-->/
   const UE_RE = /<ue-charts>([\s\S]*?)<\/ue-charts>/
   const FIN_RE = /<fin-charts>([\s\S]*?)<\/fin-charts>/
+  const PEER_RE = /<peer-charts>([\s\S]*?)<\/peer-charts>/
 
   function parseSegments(text: string): Segment[] {
     const out: Segment[] = []
@@ -87,20 +89,20 @@ export default function MemoPage() {
       const iraMatch = IRA_RE.exec(remaining)
       const ueMatch = UE_RE.exec(remaining)
       const finMatch = FIN_RE.exec(remaining)
+      const peerMatch = PEER_RE.exec(remaining)
 
       const iraIdx = iraMatch ? iraMatch.index : Infinity
       const ueIdx = ueMatch ? ueMatch.index : Infinity
       const finIdx = finMatch ? finMatch.index : Infinity
+      const peerIdx = peerMatch ? peerMatch.index : Infinity
 
-      const minIdx = Math.min(ueIdx, finIdx, iraIdx)
+      const minIdx = Math.min(ueIdx, finIdx, peerIdx, iraIdx)
 
       if (minIdx === Infinity) {
-        // No more markers
         out.push({ type: 'markdown', text: remaining })
         break
       }
 
-      // Push markdown text before the first marker
       if (minIdx > 0) out.push({ type: 'markdown', text: remaining.slice(0, minIdx) })
 
       if (minIdx === ueIdx && ueMatch) {
@@ -115,6 +117,12 @@ export default function MemoPage() {
           if (Array.isArray(charts) && charts.length > 0) out.push({ type: 'fin-charts', charts })
         } catch { /* malformed JSON — skip */ }
         remaining = remaining.slice(finMatch.index + finMatch[0].length)
+      } else if (minIdx === peerIdx && peerMatch) {
+        try {
+          const charts = JSON.parse(peerMatch[1].trim()) as ChartSpec[]
+          if (Array.isArray(charts) && charts.length > 0) out.push({ type: 'peer-charts', charts })
+        } catch { /* malformed JSON — skip */ }
+        remaining = remaining.slice(peerMatch.index + peerMatch[0].length)
       } else if (minIdx === iraIdx && iraMatch) {
         try {
           const data = JSON.parse(iraMatch[1]) as { entryRevenue: number; investmentAmount: number; valuation: number }
@@ -580,6 +588,9 @@ export default function MemoPage() {
                         }
                         if (seg.type === 'fin-charts') {
                           return <UnitEconomicsCharts key={i} charts={seg.charts} label="Financial Charts — auto-generated from uploaded data" />
+                        }
+                        if (seg.type === 'peer-charts') {
+                          return <UnitEconomicsCharts key={i} charts={seg.charts} label="Peer Valuation Benchmarking — sourced from research data" />
                         }
                         if (seg.type === 'ira') {
                           return (
