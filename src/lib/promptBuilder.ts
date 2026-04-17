@@ -65,20 +65,49 @@ Include 5–8 direct competitors. Pull data from the research (news, Reddit, HN,
 </ue-charts>
 
 Rules for the chart block:
-- Include up to 8 charts. Only include charts where you have actual data from the document — no invented numbers.
-- Chart types: "line" for trends, "bar" for monthly comparisons. For combo charts (bars + line overlay), set top-level "type":"bar" and add "chartType":"line" on the line dataset.
+- CRITICAL: Only output a chart if you can find actual numbers for it in the uploaded document. If the data is not there, silently skip that chart — do NOT mention it anywhere, do NOT say "data unavailable" or "no data for X". Just omit it entirely.
+- No invented or estimated numbers. Every data point must come directly from the file.
+- Include up to 10 charts. More is better if the data exists.
+- Chart types: "line" for time-series trends, "bar" for monthly/period comparisons. For combo charts (bars + a line overlay), set top-level "type":"bar" and add "chartType":"line" on the line dataset.
 - yFormat options: "dollarmillions" ($M), "dollar" ($), "percent" (%), "thousands" (K), "number" (plain).
 - For stacked bar charts: add "stacked": true.
-- Labels should be short date strings (e.g. "Mar-25", "Q1-25") or category names.
-- Prioritize these charts (include all that have data):
-  1. Revenue / MRR trend — bar or line, yFormat "dollarmillions"
-  2. ARPU or revenue per user over time — line, yFormat "dollar"
-  3. User / customer count or breakdown by segment — bar with stacked:true if segments exist
-  4. Engagement metric per user (e.g. videos/generations/sessions per user) — bar, yFormat "number"
-  5. Retention cohort curves — IMPORTANT: if cohort retention data exists (% of users retained over months), output it as a multi-line chart where each dataset is one cohort (labeled by acquisition month e.g. "Apr-25"), x-axis labels are ["1","2","3","4"...] (months since acquisition), yFormat "percent", xLabel "Months Since Acquisition". All cohorts start at 100.
-  6. Gross profit & margin trend — combo bar+line, yFormat "dollarmillions" for bars (revenue, cost), "percent" for margin line
-  7. B2B vs B2C or channel split — stacked bar
-  8. Any other meaningful time-series metric from the data
+- Labels: short date strings ("Mar-25", "Q1-25") for time series, or category names.
+
+Look for and chart the following metrics — silently skip any that are missing from the document:
+
+GROWTH & RETENTION (if time-series data exists):
+- YoY ARR Growth — line, yFormat "percent"
+- Gross New ARR Composition (new logo ARR, expansion ARR) — stacked bar, yFormat "dollarmillions"
+- New Logo Velocity (new logos added per period) — bar, yFormat "number"
+- Quick Ratio (new ARR / churned ARR) — line, yFormat "number"
+- Gross Dollar Retention (GDR) — line, yFormat "percent"
+- Net Dollar Retention / NRR — line, yFormat "percent"
+
+OPERATIONAL EFFICIENCY (if data exists):
+- Net Magic Number (net new ARR / S&M spend) — line, yFormat "number"
+- Rule of 40 (ARR growth % + FCF margin %) — bar or line, yFormat "percent"
+- CAC Payback Period (months) — line, yFormat "number", xLabel "Months"
+- Burn Multiple (net burn / net new ARR) — line, yFormat "number"
+- OpEx as % of Revenue — line or stacked area, yFormat "percent"
+
+PROFITABILITY & CASH FLOW (if data exists):
+- Gross Margin trend — line, yFormat "percent"
+- FCF Margin trend — line, yFormat "percent"
+- Revenue vs. Costs combo — bars for revenue & cost, line for gross profit, yFormat "dollarmillions"
+
+HEADCOUNT (if data exists):
+- Headcount Distribution by team/function — stacked bar, yFormat "number"
+- ARR per FTE — line, yFormat "dollarmillions"
+- OpEx per FTE — line, yFormat "dollarmillions"
+
+OTHER (always include if data exists):
+- Total revenue / MRR / ARR trend — bar, yFormat "dollarmillions"
+- ARPU trend — line, yFormat "dollar"
+- User or customer count / breakdown by segment — bar or stacked bar, yFormat "number" or "thousands"
+- Engagement metric per user (e.g. videos/generations/sessions per user per month) — bar, yFormat "number"
+- Retention cohort curves — if cohort data exists: multi-line chart, each dataset = one cohort labeled by acquisition month (e.g. "Apr-25"), x-axis labels = ["1","2","3"...] (months since acquisition), yFormat "percent", xLabel "Months Since Acquisition", all cohorts start at 100
+- B2B vs B2C or channel revenue split — stacked bar, yFormat "dollarmillions"
+
 - Output ONLY valid JSON inside the tags — no comments, no trailing commas.
 
 After the chart block, write your text analysis:
