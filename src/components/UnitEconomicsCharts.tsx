@@ -1,6 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
+import ChartErrorBoundary from './ChartErrorBoundary'
 
 const ChartRenderer = dynamic(() => import('./ChartRenderer'), {
   ssr: false,
@@ -75,6 +76,7 @@ function makeFmt(yFormat: ChartSpec['yFormat']) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toWaterfallConfig(spec: ChartSpec): Record<string, any> {
   const ds = spec.datasets[0]
+  if (!ds) return { type: 'bar', data: { labels: spec.labels, datasets: [] }, options: { responsive: true, maintainAspectRatio: false } }
   const values = ds.data
   const isTotals: boolean[] = ds.totals ?? values.map(() => false)
   const fmt = makeFmt(spec.yFormat)
@@ -124,6 +126,7 @@ function toWaterfallConfig(spec: ChartSpec): Record<string, any> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toChartConfig(spec: ChartSpec): Record<string, any> {
   if (spec.type === 'waterfall') return toWaterfallConfig(spec)
+  if (!spec.datasets || spec.datasets.length === 0) return { type: spec.type, data: { labels: spec.labels, datasets: [] }, options: { responsive: true, maintainAspectRatio: false } }
 
   const hasMixed = spec.datasets.some(d => d.chartType && d.chartType !== spec.type)
   const allLines = spec.type === 'line' && spec.datasets.every(d => !d.chartType || d.chartType === 'line')
@@ -161,14 +164,20 @@ function toChartConfig(spec: ChartSpec): Record<string, any> {
       data: ds.data,
       backgroundColor: bgColor,
       borderColor: borderColor,
-      borderWidth: isLine ? (isCohort ? 2 : 2.5) : 0,
-      borderDash: ds.isDashed ? [6, 4] : [],
-      pointRadius: isLine ? (isCohort ? 0 : 4) : 0,
-      pointHoverRadius: isLine ? 5 : 0,
-      tension: isLine ? 0.2 : 0,
-      fill: false,
       yAxisID: useY1 ? 'y1' : 'y',
-      borderRadius: isLine ? 0 : 3,
+      // Line-only properties
+      ...(isLine ? {
+        borderWidth: isCohort ? 2 : 2.5,
+        pointRadius: isCohort ? 0 : 4,
+        pointHoverRadius: 5,
+        tension: 0.2,
+        fill: false,
+        ...(ds.isDashed ? { borderDash: [6, 4] } : {}),
+      } : {
+        // Bar-only properties
+        borderWidth: 0,
+        borderRadius: 3,
+      }),
     }
   })
 
@@ -232,6 +241,18 @@ function toChartConfig(spec: ChartSpec): Record<string, any> {
   }
 }
 
+// ── Sanitize a spec — replace null/undefined/NaN in data arrays with 0 ─────────
+
+function sanitizeSpec(spec: ChartSpec): ChartSpec {
+  return {
+    ...spec,
+    datasets: spec.datasets.map(ds => ({
+      ...ds,
+      data: ds.data.map(v => (typeof v === 'number' && isFinite(v) ? v : 0)),
+    })),
+  }
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 interface Props {
@@ -256,7 +277,8 @@ export default function UnitEconomicsCharts({ charts, label }: Props) {
       </div>
 
       <div className={`grid gap-4 ${charts.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
-        {charts.map((spec, i) => {
+        {charts.map((rawSpec, i) => {
+          const spec = sanitizeSpec(rawSpec)
           const isWaterfall = spec.type === 'waterfall'
           const isCohort =
             spec.type === 'line' &&
@@ -267,28 +289,29 @@ export default function UnitEconomicsCharts({ charts, label }: Props) {
           const height = isWaterfall ? 280 : isCohort ? 260 : 220
 
           return (
-            <div
-              key={i}
-              className={`bg-white border border-gray-200 rounded-xl p-4 shadow-sm ${isWide ? 'col-span-2' : ''}`}
-            >
-              <p className="text-xs font-semibold text-gray-600 mb-2">{spec.title}</p>
+            <ChartErrorBoundary key={i}>
+              <div
+                className={`bg-white border border-gray-200 rounded-xl p-4 shadow-sm ${isWide ? 'col-span-2' : ''}`}
+              >
+                <p className="text-xs font-semibold text-gray-600 mb-2">{spec.title}</p>
 
-              {/* Waterfall legend */}
-              {isWaterfall && (
-                <div className="flex items-center gap-4 mb-2">
-                  {[['#1e4d8c', 'Increase'], ['#e07b39', 'Decrease'], ['#2d7a3c', 'Total']].map(([color, lbl]) => (
-                    <span key={lbl} className="flex items-center gap-1 text-xs text-gray-500">
-                      <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: color }} />
-                      {lbl}
-                    </span>
-                  ))}
+                {/* Waterfall legend */}
+                {isWaterfall && (
+                  <div className="flex items-center gap-4 mb-2">
+                    {[['#1e4d8c', 'Increase'], ['#e07b39', 'Decrease'], ['#2d7a3c', 'Total']].map(([color, lbl]) => (
+                      <span key={lbl} className="flex items-center gap-1 text-xs text-gray-500">
+                        <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: color }} />
+                        {lbl}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ height }}>
+                  <ChartRenderer config={toChartConfig(spec)} />
                 </div>
-              )}
-
-              <div style={{ height }}>
-                <ChartRenderer config={toChartConfig(spec)} />
               </div>
-            </div>
+            </ChartErrorBoundary>
           )
         })}
       </div>

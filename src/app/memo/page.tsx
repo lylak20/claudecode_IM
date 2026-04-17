@@ -75,11 +75,20 @@ export default function MemoPage() {
     | { type: 'fin-charts'; charts: ChartSpec[] }
     | { type: 'peer-charts'; charts: ChartSpec[] }
     | { type: 'ira'; data: { entryRevenue: number; investmentAmount: number; valuation: number } }
+    | { type: 'loading'; label: string }
 
   const IRA_RE = /<!--\s*IRA_CALCULATOR:(\{[\s\S]*?\})\s*-->/
   const UE_RE = /<ue-charts>([\s\S]*?)<\/ue-charts>/
   const FIN_RE = /<fin-charts>([\s\S]*?)<\/fin-charts>/
   const PEER_RE = /<peer-charts>([\s\S]*?)<\/peer-charts>/
+
+  // Opening-tag-only patterns — used to detect incomplete streaming blocks
+  const PARTIAL_MARKERS: { re: RegExp; label: string }[] = [
+    { re: /<ue-charts>/, label: 'Generating charts…' },
+    { re: /<fin-charts>/, label: 'Generating financial charts…' },
+    { re: /<peer-charts>/, label: 'Generating peer benchmarks…' },
+    { re: /<!--\s*IRA_CALCULATOR:/, label: 'Generating returns calculator…' },
+  ]
 
   function parseSegments(text: string): Segment[] {
     const out: Segment[] = []
@@ -99,7 +108,20 @@ export default function MemoPage() {
       const minIdx = Math.min(ueIdx, finIdx, peerIdx, iraIdx)
 
       if (minIdx === Infinity) {
-        out.push({ type: 'markdown', text: remaining })
+        // No complete block found — check for a partial/streaming block (opening tag but no closing tag yet)
+        let partialIdx = Infinity
+        let partialLabel = ''
+        for (const { re, label } of PARTIAL_MARKERS) {
+          const m = re.exec(remaining)
+          if (m && m.index < partialIdx) { partialIdx = m.index; partialLabel = label }
+        }
+        if (partialIdx < Infinity) {
+          // Emit text before the partial block, then a loading placeholder
+          if (partialIdx > 0) out.push({ type: 'markdown', text: remaining.slice(0, partialIdx) })
+          out.push({ type: 'loading', label: partialLabel })
+        } else {
+          out.push({ type: 'markdown', text: remaining })
+        }
         break
       }
 
@@ -608,6 +630,14 @@ export default function MemoPage() {
                               preMoneyValuation={Number(seg.data.valuation)}
                               entryRevenue={Number(seg.data.entryRevenue)}
                             />
+                          )
+                        }
+                        if (seg.type === 'loading') {
+                          return (
+                            <div key={i} className="my-4 flex items-center gap-3 text-xs text-stone-400">
+                              <div className="w-4 h-4 border-2 border-stone-200 border-t-stone-400 rounded-full animate-spin flex-shrink-0" />
+                              {seg.label}
+                            </div>
                           )
                         }
                         return null
