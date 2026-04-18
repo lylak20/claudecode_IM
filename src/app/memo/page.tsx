@@ -119,17 +119,36 @@ export default function MemoPage() {
       const afterOpen = remaining.slice(firstOpen)
       const openMatch = firstMarker.openRe.exec(afterOpen)! // guaranteed to match at 0
       const innerStart = openMatch[0].length
-      const closeMatch = firstMarker.closeRe.exec(afterOpen.slice(innerStart))
+      const innerText = afterOpen.slice(innerStart)
+      const closeMatch = firstMarker.closeRe.exec(innerText)
 
-      if (!closeMatch) {
-        // Closing tag not yet streamed — show loading spinner and stop
-        out.push({ type: 'loading', label: firstMarker.loadingLabel })
-        break
+      let inner: string
+      let blockEnd: number
+
+      if (closeMatch) {
+        // Ideal path — proper closing tag found
+        inner = innerText.slice(0, closeMatch.index)
+        blockEnd = firstOpen + innerStart + closeMatch.index + closeMatch[0].length
+      } else {
+        // No closing tag. The AI sometimes skips it and jumps straight to the
+        // next block opener (e.g. </fin-charts> missing, <peer-charts> follows).
+        // Find the earliest OTHER opener inside innerText to use as the implicit end.
+        let nextOpen = Infinity
+        for (const m of MARKERS) {
+          const hit = m.openRe.exec(innerText)
+          if (hit && hit.index < nextOpen) nextOpen = hit.index
+        }
+
+        if (nextOpen < Infinity) {
+          // Treat content up to the next opener as the complete inner content
+          inner = innerText.slice(0, nextOpen)
+          blockEnd = firstOpen + innerStart + nextOpen
+        } else {
+          // No next opener found — still streaming, show spinner and stop
+          out.push({ type: 'loading', label: firstMarker.loadingLabel })
+          break
+        }
       }
-
-      // We have the complete block — extract inner content
-      const inner = afterOpen.slice(innerStart, innerStart + closeMatch.index)
-      const blockEnd = firstOpen + innerStart + closeMatch.index + closeMatch[0].length
 
       const seg = firstMarker.segType
       if (seg === 'ue-charts' || seg === 'fin-charts' || seg === 'peer-charts') {
