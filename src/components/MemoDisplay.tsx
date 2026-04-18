@@ -8,8 +8,27 @@ interface MemoDisplayProps {
   isStreaming: boolean
 }
 
+/** Strip any raw chart-marker blocks that parseSegments should have consumed.
+ *  Complete blocks are removed silently (charts rendered elsewhere).
+ *  Incomplete/streaming blocks (opening tag, no closing tag) are stripped from
+ *  the end of the text so raw JSON never shows up in the markdown render. */
+function sanitizeForMarkdown(raw: string): string {
+  return raw
+    // Complete blocks — already rendered as charts; remove the raw text
+    .replace(/<ue-charts>[\s\S]*?<\/ue-charts>/g, '')
+    .replace(/<fin-charts>[\s\S]*?<\/fin-charts>/g, '')
+    .replace(/<peer-charts>[\s\S]*?<\/peer-charts>/g, '')
+    .replace(/<!--\s*IRA_CALCULATOR:[\s\S]*?-->/g, '')
+    // Incomplete / mid-stream blocks — strip from opening tag to end of string
+    .replace(/<ue-charts>[\s\S]*$/, '')
+    .replace(/<fin-charts>[\s\S]*$/, '')
+    .replace(/<peer-charts>[\s\S]*$/, '')
+    .replace(/<!--\s*IRA_CALCULATOR:[\s\S]*$/, '')
+}
+
 export default function MemoDisplay({ text, isStreaming }: MemoDisplayProps) {
   if (!text) return null
+  const safeText = sanitizeForMarkdown(text)
 
   return (
     <div className="prose prose-gray max-w-none">
@@ -95,7 +114,7 @@ export default function MemoDisplay({ text, isStreaming }: MemoDisplayProps) {
           ),
         }}
       >
-        {text}
+        {safeText}
       </ReactMarkdown>
       {isStreaming && (
         <span className="inline-block w-2 h-5 bg-gray-400 animate-pulse ml-0.5 align-middle" />

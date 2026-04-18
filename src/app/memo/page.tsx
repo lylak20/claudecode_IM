@@ -86,7 +86,7 @@ export default function MemoPage() {
     { segType: 'ue-charts',   openRe: /<ue-charts>/,          closeRe: /<\/ue-charts>/,   loadingLabel: 'Generating charts…' },
     { segType: 'fin-charts',  openRe: /<fin-charts>/,         closeRe: /<\/fin-charts>/,  loadingLabel: 'Generating financial charts…' },
     { segType: 'peer-charts', openRe: /<peer-charts>/,        closeRe: /<\/peer-charts>/, loadingLabel: 'Generating peer benchmarks…' },
-    { segType: 'ira',         openRe: /<!--\s*IRA_CALCULATOR:/, closeRe: /-->/,            loadingLabel: 'Generating returns calculator…' },
+    { segType: 'ira',         openRe: /<!--\s*IRA_CALCULATOR:/, closeRe: /\}\s*-->/,       loadingLabel: 'Generating returns calculator…' },
   ]
 
   function parseSegments(text: string): Segment[] {
@@ -139,9 +139,10 @@ export default function MemoPage() {
         } catch { /* malformed JSON — skip silently */ }
       } else if (seg === 'ira') {
         try {
-          // IRA block is an HTML comment: <!-- IRA_CALCULATOR:{...} -->
-          // inner = ' IRA_CALCULATOR:{...} ' → extract the JSON object
-          const jsonStr = inner.replace(/^\s*IRA_CALCULATOR:/, '').trim()
+          // IRA block: <!-- IRA_CALCULATOR:{...} -->
+          // closeRe is /\}\s*-->/ so `inner` ends just before the closing `}` of the JSON.
+          // Reconstruct by appending the `}` that the closeRe consumed.
+          const jsonStr = (inner.replace(/^\s*IRA_CALCULATOR:\s*/, '') + '}').trim()
           const data = JSON.parse(jsonStr) as { entryRevenue: number; investmentAmount: number; valuation: number }
           out.push({ type: 'ira', data })
         } catch { /* malformed JSON — skip silently */ }
