@@ -77,17 +77,16 @@ export default function MemoPage() {
     | { type: 'ira'; data: { entryRevenue: number; investmentAmount: number; valuation: number } }
     | { type: 'loading'; label: string }
 
-  const IRA_RE = /<!--\s*IRA_CALCULATOR:(\{[\s\S]*?\})\s*-->/
-  const UE_RE = /<ue-charts>([\s\S]*?)<\/ue-charts>/
-  const FIN_RE = /<fin-charts>([\s\S]*?)<\/fin-charts>/
-  const PEER_RE = /<peer-charts>([\s\S]*?)<\/peer-charts>/
+  // Marker table — open pattern, close pattern, segment type, loading label
+  type MarkerDef =
+    | { segType: 'ue-charts' | 'fin-charts' | 'peer-charts'; openRe: RegExp; closeRe: RegExp; loadingLabel: string }
+    | { segType: 'ira'; openRe: RegExp; closeRe: RegExp; loadingLabel: string }
 
-  // Opening-tag-only patterns — used to detect incomplete streaming blocks
-  const PARTIAL_MARKERS: { re: RegExp; label: string }[] = [
-    { re: /<ue-charts>/, label: 'Generating charts…' },
-    { re: /<fin-charts>/, label: 'Generating financial charts…' },
-    { re: /<peer-charts>/, label: 'Generating peer benchmarks…' },
-    { re: /<!--\s*IRA_CALCULATOR:/, label: 'Generating returns calculator…' },
+  const MARKERS: MarkerDef[] = [
+    { segType: 'ue-charts',   openRe: /<ue-charts>/,          closeRe: /<\/ue-charts>/,   loadingLabel: 'Generating charts…' },
+    { segType: 'fin-charts',  openRe: /<fin-charts>/,         closeRe: /<\/fin-charts>/,  loadingLabel: 'Generating financial charts…' },
+    { segType: 'peer-charts', openRe: /<peer-charts>/,        closeRe: /<\/peer-charts>/, loadingLabel: 'Generating peer benchmarks…' },
+    { segType: 'ira',         openRe: /<!--\s*IRA_CALCULATOR:/, closeRe: /-->/,            loadingLabel: 'Generating returns calculator…' },
   ]
 
   function parseSegments(text: string): Segment[] {
@@ -95,63 +94,60 @@ export default function MemoPage() {
     let remaining = text
 
     while (remaining.length > 0) {
-      const iraMatch = IRA_RE.exec(remaining)
-      const ueMatch = UE_RE.exec(remaining)
-      const finMatch = FIN_RE.exec(remaining)
-      const peerMatch = PEER_RE.exec(remaining)
+      // Find the earliest opening tag across all marker types
+      let firstOpen = Infinity
+      let firstMarker: MarkerDef | null = null
 
-      const iraIdx = iraMatch ? iraMatch.index : Infinity
-      const ueIdx = ueMatch ? ueMatch.index : Infinity
-      const finIdx = finMatch ? finMatch.index : Infinity
-      const peerIdx = peerMatch ? peerMatch.index : Infinity
-
-      const minIdx = Math.min(ueIdx, finIdx, peerIdx, iraIdx)
-
-      if (minIdx === Infinity) {
-        // No complete block found — check for a partial/streaming block (opening tag but no closing tag yet)
-        let partialIdx = Infinity
-        let partialLabel = ''
-        for (const { re, label } of PARTIAL_MARKERS) {
-          const m = re.exec(remaining)
-          if (m && m.index < partialIdx) { partialIdx = m.index; partialLabel = label }
+      for (const marker of MARKERS) {
+        const m = marker.openRe.exec(remaining)
+        if (m && m.index < firstOpen) {
+          firstOpen = m.index
+          firstMarker = marker
         }
-        if (partialIdx < Infinity) {
-          // Emit text before the partial block, then a loading placeholder
-          if (partialIdx > 0) out.push({ type: 'markdown', text: remaining.slice(0, partialIdx) })
-          out.push({ type: 'loading', label: partialLabel })
-        } else {
-          out.push({ type: 'markdown', text: remaining })
-        }
+      }
+
+      if (firstOpen === Infinity || !firstMarker) {
+        // No opening tags at all — everything is plain markdown
+        out.push({ type: 'markdown', text: remaining })
         break
       }
 
-      if (minIdx > 0) out.push({ type: 'markdown', text: remaining.slice(0, minIdx) })
+      // Emit markdown before the opening tag
+      if (firstOpen > 0) out.push({ type: 'markdown', text: remaining.slice(0, firstOpen) })
 
-      if (minIdx === ueIdx && ueMatch) {
-        try {
-          const charts = JSON.parse(ueMatch[1].trim()) as ChartSpec[]
-          if (Array.isArray(charts) && charts.length > 0) out.push({ type: 'ue-charts', charts })
-        } catch { /* malformed JSON — skip */ }
-        remaining = remaining.slice(ueMatch.index + ueMatch[0].length)
-      } else if (minIdx === finIdx && finMatch) {
-        try {
-          const charts = JSON.parse(finMatch[1].trim()) as ChartSpec[]
-          if (Array.isArray(charts) && charts.length > 0) out.push({ type: 'fin-charts', charts })
-        } catch { /* malformed JSON — skip */ }
-        remaining = remaining.slice(finMatch.index + finMatch[0].length)
-      } else if (minIdx === peerIdx && peerMatch) {
-        try {
-          const charts = JSON.parse(peerMatch[1].trim()) as ChartSpec[]
-          if (Array.isArray(charts) && charts.length > 0) out.push({ type: 'peer-charts', charts })
-        } catch { /* malformed JSON — skip */ }
-        remaining = remaining.slice(peerMatch.index + peerMatch[0].length)
-      } else if (minIdx === iraIdx && iraMatch) {
-        try {
-          const data = JSON.parse(iraMatch[1]) as { entryRevenue: number; investmentAmount: number; valuation: number }
-          out.push({ type: 'ira', data })
-        } catch { /* malformed JSON — skip */ }
-        remaining = remaining.slice(iraMatch.index + iraMatch[0].length)
+      // Find the matching closing tag
+      const afterOpen = remaining.slice(firstOpen)
+      const openMatch = firstMarker.openRe.exec(afterOpen)! // guaranteed to match at 0
+      const innerStart = openMatch[0].length
+      const closeMatch = firstMarker.closeRe.exec(afterOpen.slice(innerStart))
+
+      if (!closeMatch) {
+        // Closing tag not yet streamed — show loading spinner and stop
+        out.push({ type: 'loading', label: firstMarker.loadingLabel })
+        break
       }
+
+      // We have the complete block — extract inner content
+      const inner = afterOpen.slice(innerStart, innerStart + closeMatch.index)
+      const blockEnd = firstOpen + innerStart + closeMatch.index + closeMatch[0].length
+
+      const seg = firstMarker.segType
+      if (seg === 'ue-charts' || seg === 'fin-charts' || seg === 'peer-charts') {
+        try {
+          const charts = JSON.parse(inner.trim()) as ChartSpec[]
+          if (Array.isArray(charts) && charts.length > 0) out.push({ type: seg, charts })
+        } catch { /* malformed JSON — skip silently */ }
+      } else if (seg === 'ira') {
+        try {
+          // IRA block is an HTML comment: <!-- IRA_CALCULATOR:{...} -->
+          // inner = ' IRA_CALCULATOR:{...} ' → extract the JSON object
+          const jsonStr = inner.replace(/^\s*IRA_CALCULATOR:/, '').trim()
+          const data = JSON.parse(jsonStr) as { entryRevenue: number; investmentAmount: number; valuation: number }
+          out.push({ type: 'ira', data })
+        } catch { /* malformed JSON — skip silently */ }
+      }
+
+      remaining = remaining.slice(blockEnd)
     }
 
     return out
