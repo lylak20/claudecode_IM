@@ -213,9 +213,20 @@ export default function IRACalculator({
                   </span>
                 </td>
               </tr>
+              {/* Editable entry EV/Revenue — back-calculates entryRevenue when changed */}
               <tr>
                 <td className={TH}>Entry EV / Revenue</td>
-                <td className={TD}>{entryRevenue > 0 ? `${(postMoney / entryRevenue).toFixed(1)}x` : '—'}</td>
+                <td className={TD}>
+                  <YellowInput
+                    value={entryRevenue > 0 ? parseFloat((postMoney / entryRevenue).toFixed(1)) : 0}
+                    onChange={v => { if (v > 0) setEntryRevenue(postMoney / v) }}
+                    suffix="x"
+                    min={0.1}
+                    max={10000}
+                    step={0.5}
+                    width="w-20"
+                  />
+                </td>
               </tr>
               <tr>
                 <td className={TH}>Hold Period</td>
