@@ -25,7 +25,6 @@ export const ALL_SECTIONS = [
   'Team',
   'Market',
   'Competitors',
-  'Unit Economics',
   'Financials',
   'Investment Returns Analysis',
   'Investment Highlight',

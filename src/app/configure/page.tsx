@@ -12,7 +12,7 @@ export default function ConfigurePage() {
   const [url, setUrl] = useState('')
   const [scrapeResult, setScrapeResult] = useState<ScrapeResult | null>(null)
   const [selectedSections, setSelectedSections] = useState<Set<string>>(
-    new Set(ALL_SECTIONS.filter(s => s !== 'Unit Economics' && s !== 'Financials'))
+    new Set(ALL_SECTIONS.filter(s => s !== 'Financials'))
   )
   const [sectionNotes, setSectionNotes] = useState<Record<string, string>>({})
   const [fileContent, setFileContent] = useState('')
@@ -56,15 +56,13 @@ export default function ConfigurePage() {
     })
   }, [investmentAmount, valuation])
 
-  // Auto-check Unit Economics + Financials when a file is uploaded; uncheck + disable when removed
+  // Auto-check Financials when a file is uploaded; uncheck + disable when removed
   useEffect(() => {
     setSelectedSections(prev => {
       const next = new Set(prev)
       if (fileContent) {
-        next.add('Unit Economics')
         next.add('Financials')
       } else {
-        next.delete('Unit Economics')
         next.delete('Financials')
       }
       return next
@@ -169,7 +167,7 @@ export default function ConfigurePage() {
         {/* Supporting Document */}
         <div className="bg-white rounded-2xl border border-stone-200 p-6 mb-4">
           <h2 className="text-base font-semibold text-stone-900 mb-1">Supporting Document</h2>
-          <p className="text-xs text-stone-400 mb-4">Attach financials, pitch deck, or data room files for richer analysis. Required for Unit Economics and Financials sections.</p>
+          <p className="text-xs text-stone-400 mb-4">Attach financials, pitch deck, or data room files for richer analysis. Required for the Financials section.</p>
           <FileDropzone
             onFileParsed={(text) => { setFileContent(text); setFileError('') }}
             onError={(msg) => setFileError(msg)}
@@ -187,7 +185,7 @@ export default function ConfigurePage() {
             onNoteChange={handleNoteChange}
             customContent={{ 'Investment Returns Analysis': iraContent }}
             lockedSections={new Set(['Investment Returns Analysis'])}
-            disabledSections={fileContent ? new Set() : new Set(['Unit Economics', 'Financials'])}
+            disabledSections={fileContent ? new Set() : new Set(['Financials'])}
           />
         </div>
 
