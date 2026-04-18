@@ -261,13 +261,7 @@ export default function MemoPage() {
     }
   }, [phase, memoText, companyName, historySaved, historyMode])
 
-  // Auto-enter edit mode once streaming finishes (so memo is immediately editable)
-  useEffect(() => {
-    if (phase === 'done' && memoText && !historyMode && !isEditing) {
-      setEditText(memoText)
-      setIsEditing(true)
-    }
-  }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
+  // (Edit mode is entered manually via the "Edit memo" button — no auto-switch)
 
   // ── CSS Custom Highlight helper (Chrome/Edge ≥ 105) ──────────────────────
   const applyCSSHighlight = useCallback((range: Range) => {
