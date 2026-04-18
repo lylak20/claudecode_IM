@@ -71,8 +71,9 @@ STEP 2 — OUTPUT CHARTS using EXACTLY this XML format:
 </fin-charts>
 
 CRITICAL chart rules (apply to ALL charts):
-- ONLY include a chart if actual numbers for it exist in the uploaded document. Silently skip any chart without data — no mention, no explanation.
-- No invented numbers. Every data point must come directly from the file.
+- Include a chart if you can produce its data points — either by reading them directly from the file OR by deriving/calculating them from other numbers in the file using the formulas below. Both are valid.
+- DERIVE AND CALCULATE: if a metric is not explicitly stated but its inputs are present, compute it. For example: if S&M spend and new customer count are both in the file, calculate CAC. If revenue and COGS are present, calculate Gross Margin %. If net burn and net new revenue are present, calculate Burn Multiple. Do this for every metric where inputs exist.
+- Do NOT invent or estimate numbers that cannot be derived from data in the file. If neither the metric nor its inputs are present, silently skip that chart — no mention, no explanation.
 - Chart types: "line" for trends, "bar" for period comparisons. Combo: top-level "type":"bar" + "chartType":"line" on the overlay dataset.
 - yFormat: "dollarmillions" ($M), "thousands" ($K), "dollar" ($), "percent" (%), "number" (plain), "multiple" (x).
 - Stacked bars: add "stacked": true.
@@ -82,68 +83,68 @@ CRITICAL chart rules (apply to ALL charts):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 IF B2B (Enterprise / SMB SaaS):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Include these charts (silently skip any without data):
+Include these charts (include if data exists OR if derivable from inputs using the formula shown):
 
 SALES:
 - ARR trend (Run-Rate ARR over time) — bar, match yFormat to scale ("thousands" if $K, "dollarmillions" if $M)
-- ACV distribution or ACV trend if available — bar, yFormat "dollar"
+- ACV distribution or ACV trend — bar, yFormat "dollar" [derive: ARR / number of customers]
 
 GROWTH & RETENTION:
-- YoY ARR Growth (Year 2 ARR / Year 1 ARR - 1) — line, yFormat "percent"
+- YoY ARR Growth — line, yFormat "percent" [formula: (ARR_t / ARR_t-12mo) - 1; derive from ARR trend data]
 - Gross New ARR Composition: new logo ARR vs expansion ARR — stacked bar, match yFormat to scale
-- New Logo Velocity (new logos added per period, or growth rate) — bar, yFormat "number" or "percent"
-- Quick Ratio (Gross New ARR / Gross Churned ARR) — line, yFormat "number"
-- Gross Dollar Retention (GDR) — line, yFormat "percent"
-- Net Dollar Retention (NRR) — line, yFormat "percent"
+- New Logo Velocity — bar, yFormat "number" [new logos added per period, or % growth in logo count]
+- Quick Ratio — line, yFormat "number" [formula: Gross New ARR / Gross Churned ARR; derive from cohort/ARR waterfall data]
+- Gross Dollar Retention (GDR) — line, yFormat "percent" [formula: 1 + (Gross Churn ARR / avg(BOP ARR, EOP ARR)); derive from churn data]
+- Net Dollar Retention (NRR) — line, yFormat "percent" [formula: 1 + ((Net New ARR - New Logo ARR) / avg(BOP ARR, EOP ARR)); derive from expansion/churn data]
 
 OPERATIONAL EFFICIENCY:
-- Net Magic Number (Net New ARR / S&M Expense) — line, yFormat "number"
-- Rule of 40 (ARR Growth YoY % + FCF Margin %) — bar or line, yFormat "percent"
-- CAC Payback (CAC / (ARR Per Customer × Gross Margin)) in months — line, yFormat "number"
-- Burn Multiple (Net Burn / Net New ARR) — line, yFormat "number"
-- OpEx as % of Revenue — line, yFormat "percent"
+- Net Magic Number — line, yFormat "number" [formula: Net New ARR / S&M Expense; derive if both present]
+- Rule of 40 — bar or line, yFormat "percent" [formula: ARR Growth YoY % + FCF Margin %; derive if both computable]
+- CAC Payback — line, yFormat "number" [formula: CAC / (ARR per customer × Gross Margin); months; derive if inputs present]
+- Burn Multiple — line, yFormat "number" [formula: Net Burn / Net New ARR; derive from cash flow + ARR data]
+- OpEx as % of Revenue — line, yFormat "percent" [formula: Total OpEx / Revenue; derive from P&L data]
 
 PROFITABILITY & CASH FLOW:
-- Gross Margin (Gross Profit / Revenue) — line, yFormat "percent"
-- FCF Margin (FCF / Revenue) — line, yFormat "percent"
+- Gross Margin — line, yFormat "percent" [formula: Gross Profit / Revenue; derive if Revenue and COGS present]
+- FCF Margin — line, yFormat "percent" [formula: FCF / Revenue; derive if operating cash flow and capex present]
 - Cash balance or net burn trend — line, match yFormat to scale
 - Cash P&L waterfall (most recent period with full P&L data) — type "waterfall", yFormat "dollar". Labels = P&L line items. Data = signed values (positive for revenue/inflows, negative for costs). Mark subtotals/totals with "totals":[...]. Example dataset: {"label":"Amount","data":[500000,-120000,-80000,300000,-80000,-60000,-40000,120000],"totals":[false,false,false,true,false,false,false,true]}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 IF B2C (Consumer Tech / PLG):
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Include these charts (silently skip any without data):
+Include these charts (include if data exists OR if derivable from inputs using the formula shown):
 
 SALES METRICS:
 - Revenue or MRR trend — bar, match yFormat to scale ("thousands" if $K, "dollarmillions" if $M)
-- Revenue Growth rate (MoM or YoY %) — line, yFormat "percent"
+- Revenue Growth rate (MoM or YoY %) — line, yFormat "percent" [formula: (Rev_t / Rev_t-1) - 1; derive from revenue trend]
 - GMV trend (if marketplace) — bar, match yFormat to scale
-- ARPU trend (avg revenue per user per month) — line, yFormat "dollar"
+- ARPU trend — line, yFormat "dollar" [formula: Revenue / Active Users; derive if both present]
 
 UNIT ECONOMICS:
 - User growth (total users, DAU, MAU over time) — line or bar, yFormat "number" or "thousands"
-- B2B vs B2C or channel revenue split if mixed model — stacked bar, match yFormat to scale
-- LTV trend (if calculable from data) — line, yFormat "dollar"
-- CAC trend (S&M spend / new customers acquired) — line, yFormat "dollar"
-- LTV/CAC ratio — line, yFormat "number"
-- CAC Payback Period (months) — line, yFormat "number"
+- B2B vs B2C or channel revenue split (if mixed model) — stacked bar, match yFormat to scale
+- LTV — line, yFormat "dollar" [formula: ARPU × (1 / monthly churn rate); derive if ARPU and churn rate available]
+- CAC — line, yFormat "dollar" [formula: S&M Expense / New Customers Acquired; derive if both present]
+- LTV/CAC ratio — line, yFormat "number" [derive from LTV and CAC above; target >3x]
+- CAC Payback Period — line, yFormat "number" [formula: CAC / (ARPU × Gross Margin %); months; derive if inputs present]
 - Engagement metric per user (e.g. videos/generations/sessions per user per month) — bar, yFormat "number"
-- Retention cohort curves — if cohort data exists: multi-line, each dataset = one cohort labeled by acquisition month (e.g. "Apr-25"), x-axis = ["1","2","3"...] months since acquisition, yFormat "percent", xLabel "Months Since Acquisition", all start at 100
+- Retention cohort curves — if cohort data exists: multi-line, each dataset = one cohort labeled by acquisition month (e.g. "Apr-25"), x-axis = ["1","2","3"...] months since acquisition, yFormat "percent", xLabel "Months Since Acquisition", all cohorts start at 100
 
 RETENTION:
-- Gross churn rate (monthly or annual) — line, yFormat "percent"
-- NDR / NRR — line, yFormat "percent"
+- Gross churn rate — line, yFormat "percent" [derive from cohort or subscriber data: lost users / beginning users]
+- NDR / NRR — line, yFormat "percent" [formula: (Beg Rev + Expansion - Contraction - Churn) / Beg Rev; derive from revenue waterfall or cohort data]
 
 OPERATIONAL EFFICIENCY:
-- Rule of 40 (Revenue Growth YoY % + FCF Margin %) — bar or line, yFormat "percent"
-- Burn Multiple (Net Burn / Net New Revenue) — line, yFormat "number"
-- OpEx as % of Revenue — line, yFormat "percent"
+- Rule of 40 — bar or line, yFormat "percent" [formula: Revenue Growth YoY % + FCF Margin %; derive if both computable]
+- Burn Multiple — line, yFormat "number" [formula: Net Burn / Net New Revenue; derive from cash flow + revenue data]
+- OpEx as % of Revenue — line, yFormat "percent" [formula: Total OpEx / Revenue; derive from P&L data]
 
 PROFITABILITY & CASH FLOW:
-- Gross Margin (Gross Profit / Revenue) — line, yFormat "percent"
-- FCF Margin (FCF / Revenue) — line, yFormat "percent"
+- Gross Margin — line, yFormat "percent" [formula: Gross Profit / Revenue; derive if Revenue and COGS present]
+- FCF Margin — line, yFormat "percent" [formula: FCF / Revenue; derive if operating cash flow and capex present]
 - Cash balance or net burn trend — line, match yFormat to scale
-- Cash P&L waterfall (most recent period with full P&L data) — type "waterfall", yFormat "dollar". Labels = P&L line items. Data = signed values. Mark subtotals/totals with "totals":[...].
+- Cash P&L waterfall (most recent period with full P&L data) — type "waterfall", yFormat "dollar". Labels = P&L line items. Data = signed values (positive for revenue/inflows, negative for costs). Mark subtotals/totals with "totals":[...].
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
