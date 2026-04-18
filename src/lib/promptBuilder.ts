@@ -49,7 +49,14 @@ Include a bottom-up sanity check where possible: e.g., "[# of target users] × [
 Include 5–8 direct competitors. Pull data from the research (news, Reddit, HN, company websites). For Key Insight: write 1–2 short bullet points (no full sentences) capturing something material from recent news — e.g. "• Pivoted to enterprise in 2024 • Lost key AI partnership". Use N/A for any cell where data is not available in the research — do not guess or fabricate figures.`,
 
     'Financials': hasFile
-      ? `Analyze from the uploaded financial document. First, output a single chart data block using EXACTLY this XML format — valid JSON array inside the tags:
+      ? `Analyze from the uploaded financial document.
+
+STEP 1 — CLASSIFY THE BUSINESS MODEL:
+Read the research and financials carefully. Classify the company as either:
+- B2B (Enterprise / SMB SaaS): sells to businesses, ARR/ACV-based, logo-level retention metrics
+- B2C (Consumer Tech / PLG): sells to consumers or has product-led growth, ARPU/DAU/MAU metrics
+
+STEP 2 — OUTPUT CHARTS using EXACTLY this XML format:
 
 <fin-charts>
 [
@@ -58,56 +65,90 @@ Include 5–8 direct competitors. Pull data from the research (news, Reddit, HN,
     "type": "bar",
     "yFormat": "dollarmillions",
     "labels": ["Jan-25", "Feb-25"],
-    "datasets": [{"label": "ARR", "data": [1.2, 1.8]}]
+    "datasets": [{"label": "Series", "data": [1.2, 1.8]}]
   }
 ]
 </fin-charts>
 
-CRITICAL chart rules:
-- Only include a chart if you found actual numbers in the document. If data is missing, silently omit that chart — no explanation, no mention.
-- No invented or estimated numbers. Every data point must come directly from the file.
-- Include up to 15 charts total. More is better if the data exists.
-- Chart types: "line" for trends, "bar" for period comparisons. Combo: top-level "type":"bar" + "chartType":"line" on the line dataset.
-- yFormat options: "dollarmillions" ($M), "dollar" ($), "percent" (%), "thousands" (K), "number" (plain), "multiple" (x).
-- For stacked bar charts: add "stacked": true.
-- Labels: short date strings ("Mar-25", "Q1-25") for time series, or category names.
+CRITICAL chart rules (apply to ALL charts):
+- ONLY include a chart if actual numbers for it exist in the uploaded document. Silently skip any chart without data — no mention, no explanation.
+- No invented numbers. Every data point must come directly from the file.
+- Chart types: "line" for trends, "bar" for period comparisons. Combo: top-level "type":"bar" + "chartType":"line" on the overlay dataset.
+- yFormat: "dollarmillions" ($M), "thousands" ($K), "dollar" ($), "percent" (%), "number" (plain), "multiple" (x).
+- Stacked bars: add "stacked": true.
+- Labels: short date strings ("Mar-25", "Q1-25") for time series; category names for breakdowns.
+- Output ONLY valid JSON inside the tags — no comments, no trailing commas.
 
-Include ALL of the following charts that have data (silently skip those without):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+IF B2B (Enterprise / SMB SaaS):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Include these charts (silently skip any without data):
 
-REVENUE & ARR:
-- Total Run-Rate ARR or Revenue trend — bar, yFormat "thousands" (if in $K) or "dollarmillions" (if in $M)
-- B2B vs B2C or channel revenue split — stacked bar, yFormat "thousands" or "dollarmillions"
-- Monthly Cash Revenue Growth (%) — line, yFormat "percent"
+SALES:
+- ARR trend (Run-Rate ARR over time) — bar, match yFormat to scale ("thousands" if $K, "dollarmillions" if $M)
+- ACV distribution or ACV trend if available — bar, yFormat "dollar"
 
 GROWTH & RETENTION:
-- YoY ARR Growth — line, yFormat "percent"
-- Net Dollar Retention / NRR — line, yFormat "percent"
+- YoY ARR Growth (Year 2 ARR / Year 1 ARR - 1) — line, yFormat "percent"
+- Gross New ARR Composition: new logo ARR vs expansion ARR — stacked bar, match yFormat to scale
+- New Logo Velocity (new logos added per period, or growth rate) — bar, yFormat "number" or "percent"
+- Quick Ratio (Gross New ARR / Gross Churned ARR) — line, yFormat "number"
 - Gross Dollar Retention (GDR) — line, yFormat "percent"
-- Quick Ratio (new ARR / churned ARR) — line, yFormat "number"
-- Gross New ARR Composition (new logo ARR, expansion ARR) — stacked bar, yFormat "dollarmillions"
+- Net Dollar Retention (NRR) — line, yFormat "percent"
 
-UNIT ECONOMICS & CUSTOMERS:
-- ARPU trend — line, yFormat "dollar"
-- User or customer count / breakdown by segment — bar or stacked bar, yFormat "number" or "thousands"
-- Engagement metric per user (e.g. videos/generations/sessions per user per month) — bar, yFormat "number"
-- Retention cohort curves — if cohort data exists: multi-line chart, each dataset = one cohort labeled by acquisition month (e.g. "Apr-25"), x-axis labels = ["1","2","3"...] (months since acquisition), yFormat "percent", xLabel "Months Since Acquisition", all cohorts start at 100
+OPERATIONAL EFFICIENCY:
+- Net Magic Number (Net New ARR / S&M Expense) — line, yFormat "number"
+- Rule of 40 (ARR Growth YoY % + FCF Margin %) — bar or line, yFormat "percent"
+- CAC Payback (CAC / (ARR Per Customer × Gross Margin)) in months — line, yFormat "number"
+- Burn Multiple (Net Burn / Net New ARR) — line, yFormat "number"
+- OpEx as % of Revenue — line, yFormat "percent"
 
-PROFITABILITY & COSTS:
-- Gross Margin % trend — line, yFormat "percent"
-- Cash balance or net burn trend — line, yFormat "dollarmillions"
-- Cash P&L waterfall (most recent period with full P&L data) — type "waterfall", yFormat "dollar". Labels = P&L line items (e.g. "Revenue","COGS","Gross Profit","S&M","R&D","G&A","Op Profit"). Data = signed values (positive for revenue/inflows, negative for costs). Mark subtotals/totals with "totals":[false,false,true,...]. Example: {"label":"Amount","data":[19435,-20298,-177,-78,-1118,-608,-9660,-828,-1706,-1147,-15067],"totals":[false,false,false,false,true,false,false,false,false,false,true]}
-- Operating expense breakdown by category — stacked bar, yFormat "dollarmillions"
+PROFITABILITY & CASH FLOW:
+- Gross Margin (Gross Profit / Revenue) — line, yFormat "percent"
+- FCF Margin (FCF / Revenue) — line, yFormat "percent"
+- Cash balance or net burn trend — line, match yFormat to scale
+- Cash P&L waterfall (most recent period with full P&L data) — type "waterfall", yFormat "dollar". Labels = P&L line items. Data = signed values (positive for revenue/inflows, negative for costs). Mark subtotals/totals with "totals":[...]. Example dataset: {"label":"Amount","data":[500000,-120000,-80000,300000,-80000,-60000,-40000,120000],"totals":[false,false,false,true,false,false,false,true]}
 
-EFFICIENCY:
-- Net Magic Number — line, yFormat "number"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+IF B2C (Consumer Tech / PLG):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Include these charts (silently skip any without data):
+
+SALES METRICS:
+- Revenue or MRR trend — bar, match yFormat to scale ("thousands" if $K, "dollarmillions" if $M)
+- Revenue Growth rate (MoM or YoY %) — line, yFormat "percent"
+- GMV trend (if marketplace) — bar, match yFormat to scale
+- ARPU trend (avg revenue per user per month) — line, yFormat "dollar"
+
+UNIT ECONOMICS:
+- User growth (total users, DAU, MAU over time) — line or bar, yFormat "number" or "thousands"
+- B2B vs B2C or channel revenue split if mixed model — stacked bar, match yFormat to scale
+- LTV trend (if calculable from data) — line, yFormat "dollar"
+- CAC trend (S&M spend / new customers acquired) — line, yFormat "dollar"
+- LTV/CAC ratio — line, yFormat "number"
 - CAC Payback Period (months) — line, yFormat "number"
-- Burn Multiple — line, yFormat "number"
-- Rule of 40 — bar or line, yFormat "percent"
-- ARR per FTE — line, yFormat "dollarmillions"
+- Engagement metric per user (e.g. videos/generations/sessions per user per month) — bar, yFormat "number"
+- Retention cohort curves — if cohort data exists: multi-line, each dataset = one cohort labeled by acquisition month (e.g. "Apr-25"), x-axis = ["1","2","3"...] months since acquisition, yFormat "percent", xLabel "Months Since Acquisition", all start at 100
 
-Output ONLY valid JSON inside the tags — no comments, no trailing commas.
+RETENTION:
+- Gross churn rate (monthly or annual) — line, yFormat "percent"
+- NDR / NRR — line, yFormat "percent"
 
-After the fin-charts block, output a peer valuation chart block using competitor data from the Competitors section research:
+OPERATIONAL EFFICIENCY:
+- Rule of 40 (Revenue Growth YoY % + FCF Margin %) — bar or line, yFormat "percent"
+- Burn Multiple (Net Burn / Net New Revenue) — line, yFormat "number"
+- OpEx as % of Revenue — line, yFormat "percent"
+
+PROFITABILITY & CASH FLOW:
+- Gross Margin (Gross Profit / Revenue) — line, yFormat "percent"
+- FCF Margin (FCF / Revenue) — line, yFormat "percent"
+- Cash balance or net burn trend — line, match yFormat to scale
+- Cash P&L waterfall (most recent period with full P&L data) — type "waterfall", yFormat "dollar". Labels = P&L line items. Data = signed values. Mark subtotals/totals with "totals":[...].
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STEP 3 — PEER VALUATION CHARTS:
+After </fin-charts>, output peer valuation charts using competitor data from the Competitors section:
 
 <peer-charts>
 [
@@ -156,15 +197,20 @@ After the fin-charts block, output a peer valuation chart block using competitor
 </peer-charts>
 
 CRITICAL peer chart rules:
-- ONLY include a company if you found its valuation OR ARR in the research data. Silently skip companies with no data.
-- If fewer than 2 companies have any data at all, output: <peer-charts>[]</peer-charts>
-- Target company goes LAST, shown in gray (#9ca3af). EV/Revenue chart only if computable for ≥2 companies.
-- Average dashed line: peers only (exclude target). Repeat same value for every label position.
-- "colors" array must have exactly one color per label.
+- ONLY include a company if you found its valuation OR ARR/revenue in the research data. Silently skip any with no data.
+- If fewer than 2 companies have any data, output: <peer-charts>[]</peer-charts>
+- Target company goes LAST, shown in gray (#9ca3af). Label as "CompanyName (cARR $XM)" if ARR is known.
+- EV/Revenue chart only if computable for ≥2 companies.
+- Average dashed line: peers only (exclude target). Repeat same average value for every label position.
+- "colors" array must have exactly one color string per label.
 - Output ONLY valid JSON — no comments, no trailing commas.
 
-After the peer-charts block, write your text analysis:
-Determine the business model type (B2B SaaS → ACV, NRR, CAC, LTV; B2C → ARPU, DAU/MAU, retention). Report all available metrics with exact figures. Cover ARR/revenue trajectory, gross margin, EBITDA margin, burn rate and runway. For valuation: calculate EV/ARR and compare against peers — is the premium or discount justified by growth, margin, or competitive position? Flag any missing key metrics and why they matter.`
+STEP 4 — TEXT ANALYSIS:
+After the peer-charts block, write your analysis. State upfront whether this is a B2B or B2C company and why. Then cover:
+- B2B: ARR trajectory, logo retention, expansion motion, NRR vs GDR, magic number, burn efficiency, CAC payback
+- B2C: revenue/MRR growth, user growth, ARPU trajectory, retention (cohorts + churn), LTV/CAC, engagement depth
+- Both: gross margin, FCF margin, burn rate and runway, missing key metrics and why they matter for underwriting
+- Valuation: EV/ARR vs peers — is the premium or discount justified by growth rate, margins, or competitive position?`
       : '',
 
     'Investment Returns Analysis': hasReturnsData
