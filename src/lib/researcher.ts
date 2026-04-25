@@ -37,7 +37,7 @@ async function scrapeCompanyDeep(baseUrl: string, homepageHtml: string): Promise
   const $ = load(homepageHtml)
   $('script, style, nav, footer, header, noscript').remove()
 
-  const keyPattern = /\b(about|team|blog|pricing|product|platform|solution|feature|how.it.works|press|news|investor|story|mission|customer|case.stud)\b/i
+  const keyPattern = /\b(about|team|blog|pricing|plans?|subscribe|subscription|upgrade|buy|product|platform|solution|feature|how.it.works|press|news|investor|story|mission|customer|case.stud)\b/i
   const seen = new Set<string>([baseUrl])
   const toFetch: string[] = []
   let productUrl: string | undefined
@@ -45,7 +45,8 @@ async function scrapeCompanyDeep(baseUrl: string, homepageHtml: string): Promise
 
   $('a[href]').each((_, el) => {
     const href = $(el).attr('href') || ''
-    const linkText = ($(el).text() + ' ' + href).toLowerCase()
+    const anchorText = $(el).text().trim().toLowerCase()
+    const linkText = (anchorText + ' ' + href).toLowerCase()
     if (!keyPattern.test(linkText)) return
     try {
       const full = href.startsWith('http') ? href : new URL(href, baseUrl).toString()
@@ -54,7 +55,10 @@ async function scrapeCompanyDeep(baseUrl: string, homepageHtml: string): Promise
         seen.add(full)
         toFetch.push(full)
         if (!productUrl && /about|product|platform|feature|solution/i.test(parsed.pathname)) productUrl = full
-        if (!pricingUrl && /pricing|plans|subscription/i.test(parsed.pathname)) pricingUrl = full
+        // Match pricing by path OR by anchor text (some sites use /buy, /subscribe, /upgrade, or hashed routes)
+        const pricingPath = /pricing|plans|subscription|\/buy\b|subscribe|upgrade/i.test(parsed.pathname)
+        const pricingAnchor = /^(pricing|plans|plan|buy|subscribe|upgrade|get started|start free)$/i.test(anchorText)
+        if (!pricingUrl && (pricingPath || pricingAnchor)) pricingUrl = full
       }
     } catch {}
   })
@@ -119,6 +123,54 @@ async function searchDuckDuckGo(query: string): Promise<string> {
   } catch {
     return ''
   }
+}
+
+// ─── DuckDuckGo HTML search (snippet scrape) ──────────────────────────────────
+// Free, no API key. Returns real web search snippets — much better than the
+// Instant Answer API for things like founder bios that live in article snippets.
+
+async function searchDuckDuckGoHTML(query: string, maxResults = 8): Promise<string> {
+  try {
+    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`
+    const html = await fetchSafe(url, {
+      headers: {
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    }, 10000)
+    if (!html) return ''
+    const $ = load(html)
+    const items: string[] = []
+    $('.result').slice(0, maxResults).each((_, el) => {
+      const title = $(el).find('.result__title, .result__a').first().text().trim()
+      const snippet = $(el).find('.result__snippet').first().text().replace(/\s+/g, ' ').trim()
+      if (snippet && snippet.length > 30) {
+        items.push(title ? `• ${title}\n  ${snippet}` : `• ${snippet}`)
+      }
+    })
+    return items.length ? `Web snippets — "${query}":\n${items.join('\n\n')}` : ''
+  } catch {
+    return ''
+  }
+}
+
+// ─── Team / Founder research ──────────────────────────────────────────────────
+// Runs several targeted queries and concatenates snippets. Designed to surface
+// the kind of bio info that appears in a Google knowledge panel (name, title,
+// prior company, education) for the memo's Team section.
+
+async function researchTeam(companyName: string): Promise<string> {
+  const queries = [
+    `${companyName} founders CEO CTO background`,
+    `${companyName} founders previously worked at`,
+    `"${companyName}" co-founder biography`,
+  ]
+  const results = await Promise.allSettled(queries.map(q => searchDuckDuckGoHTML(q, 6)))
+  const combined = results
+    .map(r => r.status === 'fulfilled' ? r.value : '')
+    .filter(Boolean)
+    .join('\n\n')
+  return combined
 }
 
 // ─── Google News RSS ──────────────────────────────────────────────────────────
@@ -261,11 +313,12 @@ export async function conductResearch(
 ): Promise<ResearchResult> {
 
   // Phase 1: Company research (all in parallel)
-  const [deepScrape, wiki, ddg, newsGeneral, newsFunding, newsCompetitors, reddit, hn] =
+  const [deepScrape, wiki, ddg, team, newsGeneral, newsFunding, newsCompetitors, reddit, hn] =
     await Promise.allSettled([
       scrapeCompanyDeep(url, homepageHtml),
       searchWikipedia(companyName),
       searchDuckDuckGo(`${companyName} founders CEO funding investors`),
+      researchTeam(companyName),
       searchGoogleNews(`"${companyName}"`, 6),
       searchGoogleNews(`"${companyName}" funding raised investors valuation`, 4),
       searchGoogleNews(`"${companyName}" competitors rival alternative`, 4),
@@ -303,6 +356,7 @@ export async function conductResearch(
     { label: 'COMPANY WEBSITE (homepage + subpages)', value: deepScrapeResult.text },
     { label: 'WIKIPEDIA', value: wiki.status === 'fulfilled' ? wiki.value : '' },
     { label: 'COMPANY FACTS (DuckDuckGo)', value: ddg.status === 'fulfilled' ? ddg.value : '' },
+    { label: 'TEAM / FOUNDER BIOS (web snippets)', value: team.status === 'fulfilled' ? team.value : '' },
     {
       label: 'NEWS',
       value: [

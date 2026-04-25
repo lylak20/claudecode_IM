@@ -24,6 +24,10 @@ function sanitizeForMarkdown(raw: string): string {
     .replace(/<fin-charts>[\s\S]*$/, '')
     .replace(/<peer-charts>[\s\S]*$/, '')
     .replace(/<!--\s*IRA_CALCULATOR:[\s\S]*$/, '')
+    // Self-closing placeholders (narrative stream emits these; parseSegments
+    // renders them as loading spinners, but strip here as a safety net)
+    .replace(/<fin-charts-pending\s*\/?>/g, '')
+    .replace(/<peer-charts-pending\s*\/?>/g, '')
 }
 
 export default function MemoDisplay({ text, isStreaming }: MemoDisplayProps) {

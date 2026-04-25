@@ -7,6 +7,14 @@ import SectionChecklist from '@/components/SectionChecklist'
 import { ALL_SECTIONS } from '@/lib/types'
 import type { ScrapeResult } from '@/lib/types'
 
+// ── Section partitioning ────────────────────────────────────────────────────
+// Quantitative = sections that pull primarily from the supporting document.
+// Qualitative = everything else (narrative + research-driven sections).
+const QUANTITATIVE_SECTIONS = ['Financials'] as const
+const QUALITATIVE_SECTIONS = ALL_SECTIONS.filter(
+  s => !(QUANTITATIVE_SECTIONS as readonly string[]).includes(s)
+)
+
 export default function ConfigurePage() {
   const router = useRouter()
   const [url, setUrl] = useState('')
@@ -20,7 +28,6 @@ export default function ConfigurePage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [investmentAmount, setInvestmentAmount] = useState('')
   const [valuation, setValuation] = useState('')
-  const [tone, setTone] = useState<'bullets' | 'prose'>('bullets')
 
   useEffect(() => {
     const storedUrl = sessionStorage.getItem('lyla_url')
@@ -78,7 +85,7 @@ export default function ConfigurePage() {
     sessionStorage.setItem('lyla_section_notes', JSON.stringify(sectionNotes))
     sessionStorage.setItem('lyla_investment_amount', investmentAmount)
     sessionStorage.setItem('lyla_valuation', valuation)
-    sessionStorage.setItem('lyla_tone', tone)
+    sessionStorage.setItem('lyla_tone', 'bullets')
     router.push('/memo')
   }
 
@@ -154,7 +161,7 @@ export default function ConfigurePage() {
         <div className="w-16" />
       </div>
 
-      <div className="max-w-2xl mx-auto px-6 py-8">
+      <div className="max-w-5xl mx-auto px-6 py-8">
         {/* Company header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-stone-900 font-serif">{companyName}</h1>
@@ -164,79 +171,62 @@ export default function ConfigurePage() {
           )}
         </div>
 
-        {/* Supporting Document */}
-        <div className="bg-white rounded-2xl border border-stone-200 p-6 mb-4">
-          <h2 className="text-base font-semibold text-stone-900 mb-1">Supporting Document</h2>
-          <p className="text-xs text-stone-400 mb-4">Attach financials, pitch deck, or data room files for richer analysis. Required for the Financials section.</p>
-          <FileDropzone
-            onFileParsed={(text) => { setFileContent(text); setFileError('') }}
-            onError={(msg) => setFileError(msg)}
-          />
+        {/* Two-column layout: Qualitative | Quantitative */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
 
-          {fileError && <p className="mt-2 text-sm text-red-600">{fileError}</p>}
-        </div>
+          {/* ── Qualitative column ── */}
+          <div className="space-y-3">
+            <div>
+              <h2 className="text-xs font-semibold tracking-widest text-stone-400 uppercase mb-1">Qualitative</h2>
+              <p className="text-xs text-stone-500">Narrative analysis driven by research and the company website.</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-stone-200 p-6">
+              <SectionChecklist
+                selected={selectedSections}
+                onToggle={toggleSection}
+                notes={sectionNotes}
+                onNoteChange={handleNoteChange}
+                customContent={{ 'Investment Returns Analysis': iraContent }}
+                lockedSections={new Set(['Investment Returns Analysis'])}
+                sections={QUALITATIVE_SECTIONS}
+                title="Sections"
+                subtitle="Check a section to include it. Add notes to override the default analysis."
+              />
+            </div>
+          </div>
 
-        {/* Sections */}
-        <div className="bg-white rounded-2xl border border-stone-200 p-6 mb-4">
-          <SectionChecklist
-            selected={selectedSections}
-            onToggle={toggleSection}
-            notes={sectionNotes}
-            onNoteChange={handleNoteChange}
-            customContent={{ 'Investment Returns Analysis': iraContent }}
-            lockedSections={new Set(['Investment Returns Analysis'])}
-            disabledSections={fileContent ? new Set() : new Set(['Financials'])}
-          />
-        </div>
+          {/* ── Quantitative column ── */}
+          <div className="space-y-3">
+            <div>
+              <h2 className="text-xs font-semibold tracking-widest text-stone-400 uppercase mb-1">Quantitative</h2>
+              <p className="text-xs text-stone-500">Charts and financial analysis derived from your supporting document.</p>
+            </div>
 
-        {/* Writing Style */}
-        <div className="bg-white rounded-2xl border border-stone-200 p-6 mb-6">
-          <h2 className="text-base font-semibold text-stone-900 mb-1">Writing Style</h2>
-          <p className="text-xs text-stone-400 mb-4">Choose how the memo should read.</p>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setTone('bullets')}
-              className={`text-left p-4 rounded-xl border-2 transition-all ${
-                tone === 'bullets'
-                  ? 'border-stone-800 bg-stone-50'
-                  : 'border-stone-200 hover:border-stone-300 hover:bg-stone-50'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-semibold text-stone-800">Bullet Point Notes</span>
-                {tone === 'bullets' && (
-                  <span className="w-4 h-4 rounded-full bg-stone-800 flex items-center justify-center flex-shrink-0">
-                    <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-stone-500 leading-relaxed">Scannable bullets, numbers up front — fast to read and easy to skim in a meeting.</p>
-            </button>
+            {/* Supporting Document */}
+            <div className="bg-white rounded-2xl border border-stone-200 p-6">
+              <h3 className="text-base font-semibold text-stone-900 mb-1">Supporting Document</h3>
+              <p className="text-xs text-stone-400 mb-4">Attach financials, pitch deck, or data room files for richer analysis. Required for the Financials section.</p>
+              <FileDropzone
+                onFileParsed={(text) => { setFileContent(text); setFileError('') }}
+                onError={(msg) => setFileError(msg)}
+              />
+              {fileError && <p className="mt-2 text-sm text-red-600">{fileError}</p>}
+            </div>
 
-            <button
-              type="button"
-              onClick={() => setTone('prose')}
-              className={`text-left p-4 rounded-xl border-2 transition-all ${
-                tone === 'prose'
-                  ? 'border-stone-800 bg-stone-50'
-                  : 'border-stone-200 hover:border-stone-300 hover:bg-stone-50'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-semibold text-stone-800">Narrative Memo</span>
-                {tone === 'prose' && (
-                  <span className="w-4 h-4 rounded-full bg-stone-800 flex items-center justify-center flex-shrink-0">
-                    <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-stone-500 leading-relaxed">Full sentences with professional IC-ready prose — best for formal presentations.</p>
-            </button>
+            {/* Financials section card */}
+            <div className="bg-white rounded-2xl border border-stone-200 p-6">
+              <SectionChecklist
+                selected={selectedSections}
+                onToggle={toggleSection}
+                notes={sectionNotes}
+                onNoteChange={handleNoteChange}
+                disabledSections={fileContent ? new Set() : new Set(['Financials'])}
+                sections={QUANTITATIVE_SECTIONS}
+                title="Sections"
+                subtitle="Auto-enabled when a supporting document is uploaded."
+                hideSelectAll
+              />
+            </div>
           </div>
         </div>
 

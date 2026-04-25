@@ -13,6 +13,14 @@ interface SectionChecklistProps {
   lockedSections?: Set<string>
   /** Sections that are greyed out and unclickable, with a requirement hint shown. */
   disabledSections?: Set<string>
+  /** Subset of sections to render. Defaults to ALL_SECTIONS. */
+  sections?: readonly string[]
+  /** Heading shown above the list. Defaults to "Choose Sections". */
+  title?: string
+  /** Subtitle/description under the heading. */
+  subtitle?: string
+  /** Hide the "Select all / Deselect all" toggle. */
+  hideSelectAll?: boolean
 }
 
 export default function SectionChecklist({
@@ -23,11 +31,17 @@ export default function SectionChecklist({
   customContent = {},
   lockedSections = new Set(),
   disabledSections = new Set(),
+  sections = ALL_SECTIONS,
+  title = 'Choose Sections',
+  subtitle = 'Check a section to include it. Add notes to override the default analysis.',
+  hideSelectAll = false,
 }: SectionChecklistProps) {
-  const allSelected = selected.size === ALL_SECTIONS.length
+  // Count how many of THIS list's sections are currently selected (ignore others)
+  const selectedHere = sections.filter(s => selected.has(s)).length
+  const allSelected = selectedHere === sections.length
 
   const toggleAll = () => {
-    ALL_SECTIONS.forEach((s) => {
+    sections.forEach((s) => {
       const has = selected.has(s)
       if (allSelected && has) onToggle(s)
       if (!allSelected && !has) onToggle(s)
@@ -37,20 +51,20 @@ export default function SectionChecklist({
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
-        <h2 className="text-base font-semibold text-stone-900">Choose Sections</h2>
-        <button
-          onClick={toggleAll}
-          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-        >
-          {allSelected ? 'Deselect all' : 'Select all'}
-        </button>
+        <h2 className="text-base font-semibold text-stone-900">{title}</h2>
+        {!hideSelectAll && sections.length > 1 && (
+          <button
+            onClick={toggleAll}
+            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+          >
+            {allSelected ? 'Deselect all' : 'Select all'}
+          </button>
+        )}
       </div>
-      <p className="text-xs text-stone-400 mb-4">
-        Check a section to include it. Add notes to override the default analysis.
-      </p>
+      <p className="text-xs text-stone-400 mb-4">{subtitle}</p>
 
       <div className="space-y-3">
-        {ALL_SECTIONS.map((section) => {
+        {sections.map((section) => {
           const isSelected = selected.has(section)
           const isLocked = lockedSections.has(section)
           const isDisabled = disabledSections.has(section)

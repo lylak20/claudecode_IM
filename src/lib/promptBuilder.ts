@@ -31,7 +31,16 @@ If data is insufficient: > *Diligence required — Request a product demo record
     'Business Model': `State clearly: B2B Enterprise SaaS / B2B SMB SaaS / B2C / Marketplace / Usage-based / Hybrid. Then cover: (1) Pricing model: monthly/annual subscription, per-seat, usage-based, freemium-to-paid, tiered — with specific price points from the research. (2) GTM motion: PLG, direct sales, channel. (3) Primary revenue streams. (4) Any evidence of contract sizes, ARPU, or conversion rates.${screenshotUrls?.pricing ? screenshotImg(screenshotUrls.pricing, 'Pricing Page') : ''}
 If pricing details are missing: > *Diligence required — Request pricing deck, ACV range by segment, and current conversion rates from free to paid.*`,
 
-    'Team': `Cover each founder/key executive with this structure: **[Name], [Title]** — [University, Degree if known]. Previously: [Company, Role, notable achievement]. Focus especially on CEO and CTO. Extract this from the company website "About" or "Team" page and from news articles in the research. What in their background is most relevant to THIS company succeeding? Be specific. If a founder's background is not in the research, say "Background not publicly available — LinkedIn verification required" rather than inventing details.`,
+    'Team': `PRIMARY SOURCE: the "TEAM / FOUNDER BIOS (web snippets)" block in the research. Also pull from WIKIPEDIA, COMPANY WEBSITE (About/Team page), and NEWS. Extract every founder/co-founder and key executive (CEO, CTO, CPO, COO) named in those snippets — do not stop at one person if two or more founders appear.
+
+Format each person as a bullet, compact and scannable:
+• **[Name], [Title]** — [1-sentence background: prior company + role, or university + field]. [Optional: one notable achievement or domain credibility marker.]
+
+Example (ElevenLabs): • **Mati Staniszewski, CEO** — Ex-Palantir strategist; leads business and strategic direction. • **Piotr Dąbkowski, CTO** — Former Google machine-learning engineer; leads technical development of the AI models.
+
+After the bullets, add 1-2 sentences on why this team is credible to win in THIS market (domain fit, prior exits, technical depth, etc.).
+
+Rules: (1) Do NOT invent backgrounds — only use facts present in the research. (2) If a founder is named but their background isn't in the snippets, write: "• **[Name], [Title]** — Background not publicly available; LinkedIn verification required." (3) Do NOT skip a named founder just because their bio is thin. (4) If the research contains no founder names at all, state that explicitly and flag it as a diligence gap.`,
 
     'Market': `Be concise and lead with numbers. Structure as:
 
@@ -49,6 +58,29 @@ Include a bottom-up sanity check where possible: e.g., "[# of target users] × [
 Include 5–8 direct competitors. Pull data from the research (news, Reddit, HN, company websites). For Key Insight: write 1–2 short bullet points (no full sentences) capturing something material from recent news — e.g. "• Pivoted to enterprise in 2024 • Lost key AI partnership". Use N/A for any cell where data is not available in the research — do not guess or fabricate figures.`,
 
     'Financials': hasFile
+      ? `Analyze from the uploaded financial document. Do NOT generate chart JSON — charts are produced by a separate dedicated call.
+
+STEP 1 — CLASSIFY THE BUSINESS MODEL (one short sentence):
+State: "This is a B2B (Enterprise / SMB SaaS)" OR "This is a B2C (Consumer Tech / PLG)" company. Give one-sentence reasoning.
+
+STEP 2 — EMIT CHART PLACEHOLDERS (exactly these two lines, nothing else between them):
+
+<fin-charts-pending />
+
+<peer-charts-pending />
+
+STEP 3 — TEXT ANALYSIS:
+After the placeholders, write your analysis. Cover:
+- If B2B: ARR trajectory, logo retention, expansion motion, NRR vs GDR, magic number, burn efficiency, CAC payback
+- If B2C: revenue/MRR growth, user growth, ARPU trajectory, retention (cohorts + churn), LTV/CAC, engagement depth
+- Both: gross margin, FCF margin, burn rate and runway, missing key metrics and why they matter for underwriting
+- Valuation: EV/ARR vs peers — is the premium or discount justified by growth rate, margins, or competitive position?
+
+CRITICAL: Do NOT output any <fin-charts>...</fin-charts> or <peer-charts>...</peer-charts> JSON blocks. Only the two self-closing placeholder tags shown above. The separate chart generation call will replace them with real charts.`
+      : '',
+
+    // Legacy full-prompt (kept for reference; no longer active):
+    '__Financials_legacy__': hasFile
       ? `Analyze from the uploaded financial document.
 
 STEP 1 — CLASSIFY THE BUSINESS MODEL:

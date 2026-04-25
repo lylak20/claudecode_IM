@@ -89,7 +89,32 @@ export default function MemoPage() {
     { segType: 'ira',         openRe: /<!--\s*IRA_CALCULATOR:/, closeRe: /\}\s*-->/,       loadingLabel: 'Generating returns calculator…' },
   ]
 
-  function parseSegments(text: string): Segment[] {
+  // Self-closing placeholders emitted by the narrative stream — replaced by a
+  // dedicated /api/generate-charts call once the main stream completes.
+  const FIN_PLACEHOLDER = /<fin-charts-pending\s*\/?>/
+  const PEER_PLACEHOLDER = /<peer-charts-pending\s*\/?>/
+
+  function tryParseCharts(raw: string): ChartSpec[] | null {
+    // Attempt several salvage strategies for truncated/malformed JSON arrays.
+    const trimmed = raw.trim().replace(/,\s*$/, '')
+    const candidates = [
+      trimmed,
+      trimmed + ']',
+      trimmed + '}]',
+      trimmed + '}}]',
+      // Strip a trailing incomplete object entirely (everything after the last "},")
+      trimmed.replace(/,\s*\{[^}]*$/, '') + ']',
+    ]
+    for (const c of candidates) {
+      try {
+        const parsed = JSON.parse(c)
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed as ChartSpec[]
+      } catch {}
+    }
+    return null
+  }
+
+  function parseSegments(text: string, stillStreaming: boolean): Segment[] {
     const out: Segment[] = []
     let remaining = text
 
@@ -104,6 +129,26 @@ export default function MemoPage() {
           firstOpen = m.index
           firstMarker = marker
         }
+      }
+
+      // Check for placeholder tags (self-closing) BEFORE falling through to plain markdown
+      // These appear in the narrative stream and are replaced by a dedicated chart call.
+      const finPh = FIN_PLACEHOLDER.exec(remaining)
+      const peerPh = PEER_PLACEHOLDER.exec(remaining)
+      type PhHit = { match: RegExpExecArray; label: string }
+      let earliestPh: PhHit | null = null
+      if (finPh) earliestPh = { match: finPh, label: 'Generating financial charts…' }
+      if (peerPh && (!earliestPh || peerPh.index < (earliestPh as PhHit).match.index)) {
+        earliestPh = { match: peerPh, label: 'Generating peer benchmarks…' }
+      }
+
+      if (earliestPh && (firstOpen === Infinity || earliestPh.match.index < firstOpen)) {
+        if (earliestPh.match.index > 0) {
+          out.push({ type: 'markdown', text: remaining.slice(0, earliestPh.match.index) })
+        }
+        out.push({ type: 'loading', label: earliestPh.label })
+        remaining = remaining.slice(earliestPh.match.index + earliestPh.match[0].length)
+        continue
       }
 
       if (firstOpen === Infinity || !firstMarker) {
@@ -130,21 +175,30 @@ export default function MemoPage() {
         inner = innerText.slice(0, closeMatch.index)
         blockEnd = firstOpen + innerStart + closeMatch.index + closeMatch[0].length
       } else {
-        // No closing tag. The AI sometimes skips it and jumps straight to the
-        // next block opener (e.g. </fin-charts> missing, <peer-charts> follows).
-        // Find the earliest OTHER opener inside innerText to use as the implicit end.
+        // No closing tag. The AI sometimes skips it.
+        // Recovery order: (1) next block opener, (2) next ## heading (section end),
+        // (3) if streaming done, consume everything, (4) else show spinner.
         let nextOpen = Infinity
         for (const m of MARKERS) {
           const hit = m.openRe.exec(innerText)
           if (hit && hit.index < nextOpen) nextOpen = hit.index
         }
 
-        if (nextOpen < Infinity) {
-          // Treat content up to the next opener as the complete inner content
-          inner = innerText.slice(0, nextOpen)
-          blockEnd = firstOpen + innerStart + nextOpen
+        // Look for the next markdown section heading as an implicit boundary
+        const headingMatch = /\n##\s/.exec(innerText)
+        const nextHeading = headingMatch ? headingMatch.index : Infinity
+
+        const implicitEnd = Math.min(nextOpen, nextHeading)
+
+        if (implicitEnd < Infinity) {
+          inner = innerText.slice(0, implicitEnd)
+          blockEnd = firstOpen + innerStart + implicitEnd
+        } else if (!stillStreaming) {
+          // Stream finished, still no boundary — consume rest of text and try to salvage
+          inner = innerText
+          blockEnd = remaining.length
         } else {
-          // No next opener found — still streaming, show spinner and stop
+          // Still streaming, no boundary yet — show spinner, wait for more tokens
           out.push({ type: 'loading', label: firstMarker.loadingLabel })
           break
         }
@@ -152,10 +206,17 @@ export default function MemoPage() {
 
       const seg = firstMarker.segType
       if (seg === 'ue-charts' || seg === 'fin-charts' || seg === 'peer-charts') {
-        try {
-          const charts = JSON.parse(inner.trim()) as ChartSpec[]
-          if (Array.isArray(charts) && charts.length > 0) out.push({ type: seg, charts })
-        } catch { /* malformed JSON — skip silently */ }
+        const charts = tryParseCharts(inner)
+        if (charts) {
+          out.push({ type: seg, charts })
+        } else if (!stillStreaming) {
+          // Unrecoverable JSON after streaming done — surface a friendly note
+          // instead of silently swallowing the entire block
+          out.push({
+            type: 'markdown',
+            text: `\n\n> *Chart data could not be rendered (generation error). The underlying numbers are still discussed in the text above.*\n\n`,
+          })
+        }
       } else if (seg === 'ira') {
         try {
           // IRA block: <!-- IRA_CALCULATOR:{...} -->
@@ -173,7 +234,8 @@ export default function MemoPage() {
     return out
   }
 
-  const segments = parseSegments(displayText)
+  const stillStreaming = !historyMode && isStreaming
+  const segments = parseSegments(displayText, stillStreaming)
 
   // Auto-grow textarea height as content changes
   useEffect(() => {
@@ -240,6 +302,8 @@ export default function MemoPage() {
         const resData = await researchRes.json().catch(() => ({ research: '', screenshotUrls: {} }))
         const research = resData.research || ''
         const screenshotUrls = resData.screenshotUrls || {}
+        // Stash research for the dedicated chart API call after streaming completes
+        try { sessionStorage.setItem('lyla_last_research', research) } catch {}
 
         setPhase('generating')
         const config: MemoConfig = {
@@ -263,6 +327,62 @@ export default function MemoPage() {
 
     run()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Dedicated chart fetch: after the narrative stream completes, if the memo
+  // contains <fin-charts-pending /> or <peer-charts-pending />, call
+  // /api/generate-charts to get chart JSON and splice it into the memo. This
+  // isolates JSON generation from the narrative's token/attention budget.
+  const chartsFetchedRef = useRef(false)
+  useEffect(() => {
+    if (chartsFetchedRef.current) return
+    if (phase !== 'done' || !memoText || historyMode) return
+    const hasFin = /<fin-charts-pending\s*\/?>/.test(memoText)
+    const hasPeer = /<peer-charts-pending\s*\/?>/.test(memoText)
+    if (!hasFin && !hasPeer) return
+    chartsFetchedRef.current = true
+
+    ;(async () => {
+      try {
+        const body = {
+          companyName,
+          fileContent: fileContent || '',
+          research: sessionStorage.getItem('lyla_last_research') || '',
+        }
+        const res = await fetch('/api/generate-charts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        const data = await res.json().catch(() => ({ finCharts: [], peerCharts: [] }))
+        const finCharts: unknown[] = Array.isArray(data.finCharts) ? data.finCharts : []
+        const peerCharts: unknown[] = Array.isArray(data.peerCharts) ? data.peerCharts : []
+
+        let next = memoText
+        // Replace fin-charts placeholder
+        if (hasFin) {
+          const replacement = finCharts.length > 0
+            ? `<fin-charts>\n${JSON.stringify(finCharts, null, 2)}\n</fin-charts>`
+            : `> *Financial charts unavailable — chart data could not be generated from the uploaded file.*`
+          next = next.replace(/<fin-charts-pending\s*\/?>/, replacement)
+        }
+        // Replace peer-charts placeholder
+        if (hasPeer) {
+          const replacement = peerCharts.length > 0
+            ? `<peer-charts>\n${JSON.stringify(peerCharts, null, 2)}\n</peer-charts>`
+            : `` // no peer data → silently drop
+          next = next.replace(/<peer-charts-pending\s*\/?>/, replacement)
+        }
+        setMemoOverride(next)
+        if (currentHistoryId) updateHistoryMemoText(currentHistoryId, next)
+      } catch {
+        // On failure, replace placeholders with a friendly note so the UI isn't stuck on spinners
+        let next = memoText
+          .replace(/<fin-charts-pending\s*\/?>/, `> *Financial charts unavailable — chart generation failed.*`)
+          .replace(/<peer-charts-pending\s*\/?>/, ``)
+        setMemoOverride(next)
+      }
+    })()
+  }, [phase, memoText, historyMode, companyName, fileContent, currentHistoryId])
 
   // Save to history once streaming is done
   useEffect(() => {

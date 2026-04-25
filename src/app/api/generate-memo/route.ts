@@ -4,7 +4,7 @@ import type { MemoConfig } from '@/lib/types'
 import { NextRequest } from 'next/server'
 
 export const runtime = 'nodejs'
-export const maxDuration = 120
+export const maxDuration = 300
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     const stream = await client.messages.stream({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
+      max_tokens: 16000,
       messages: [{ role: 'user', content: prompt }],
     })
 
