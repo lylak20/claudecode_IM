@@ -55,13 +55,14 @@ export async function POST(request: NextRequest) {
     const client = new Anthropic({ apiKey })
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-haiku-5-5',
       max_tokens: 4096,
       system: SYSTEM_PROMPT(fileContent || ''),
       messages,
     })
 
-    const raw = response.content[0].type === 'text' ? response.content[0].text.trim() : ''
+    const textBlock = response.content.find((b) => b.type === 'text')
+    const raw = textBlock && textBlock.type === 'text' ? textBlock.text.trim() : ''
 
     // Strip any accidental markdown code fences
     const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim()

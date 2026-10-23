@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
     const res = research.slice(0, 20000)
 
     const msg = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-haiku-5-5',
       max_tokens: 16000,
       messages: [{ role: 'user', content: CHART_PROMPT(companyName, file, res) }],
     })

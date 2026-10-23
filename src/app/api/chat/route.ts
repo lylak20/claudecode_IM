@@ -41,7 +41,7 @@ Here is why I made these changes: ...
 Only use <replacement> tags when you're providing a direct in-place substitution for a highlighted passage. Do not use them for general answers or analysis.`
 
     const stream = await client.messages.stream({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-haiku-5-5',
       max_tokens: 2048,
       system: systemPrompt,
       messages,

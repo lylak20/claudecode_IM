@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     const prompt = buildMemoPrompt(config)
 
     const stream = await client.messages.stream({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-haiku-5-5',
       max_tokens: 16000,
       messages: [{ role: 'user', content: prompt }],
     })
