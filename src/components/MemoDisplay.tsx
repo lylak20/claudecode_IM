@@ -30,6 +30,15 @@ function sanitizeForMarkdown(raw: string): string {
     .replace(/<peer-charts-pending\s*\/?>/g, '')
 }
 
+/** Plain text of a markdown AST node (JSON.stringify on React children throws
+ *  on circular fiber references). */
+type HastLike = { value?: unknown; children?: HastLike[] }
+function nodeText(node?: HastLike): string {
+  if (!node) return ''
+  if (typeof node.value === 'string') return node.value
+  return (node.children ?? []).map(nodeText).join('')
+}
+
 export default function MemoDisplay({ text, isStreaming }: MemoDisplayProps) {
   if (!text) return null
   const safeText = sanitizeForMarkdown(text)
@@ -70,10 +79,9 @@ export default function MemoDisplay({ text, isStreaming }: MemoDisplayProps) {
             }
             return <em>{children}</em>
           },
-          blockquote: ({ children }) => {
+          blockquote: ({ children, node }) => {
             // Check if it contains a "Diligence required" em
-            const childStr = JSON.stringify(children)
-            const isDiligence = childStr.includes('Diligence required')
+            const isDiligence = nodeText(node as HastLike).includes('Diligence required')
             if (isDiligence) {
               return (
                 <blockquote className="border-l-4 border-blue-300 pl-4 py-1 my-3 bg-blue-50 rounded-r-lg italic text-blue-700 text-[14px]">

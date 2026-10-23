@@ -537,7 +537,7 @@ export default function MemoPage() {
 
   return (
     <>
-      <style>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           .no-print { display: none !important; }
           body { background: white; }
@@ -564,7 +564,7 @@ export default function MemoPage() {
           -webkit-appearance: none;
           margin: 0;
         }
-      `}</style>
+      ` }} />
 
       <div className="h-screen flex flex-col overflow-hidden bg-stone-50">
         {/* Top bar */}
