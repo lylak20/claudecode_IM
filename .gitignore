@@ -20,3 +20,6 @@ npm-debug.log*
 
 # vercel
 .vercel
+
+# local memo history (personal data, never commit)
+/data/

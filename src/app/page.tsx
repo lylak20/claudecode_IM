@@ -1,13 +1,21 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { loadHistory, normalizeUrl } from '@/lib/history'
+import type { HistoryItem } from '@/lib/history'
 
 export default function Home() {
   const router = useRouter()
   const [url, setUrl] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [history, setHistory] = useState<HistoryItem[]>([])
+
+  useEffect(() => {
+    loadHistory().then(setHistory)
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -30,6 +38,15 @@ export default function Home() {
     }
 
     setIsLoading(true)
+
+    // Already analyzed? Open the saved memo instead of generating it again.
+    const key = normalizeUrl(fullUrl)
+    const existing = (await loadHistory()).find((h) => normalizeUrl(h.url) === key)
+    if (existing) {
+      setNotice(`${existing.companyName} is already in your history — opening the saved memo.`)
+      router.push(`/memo?id=${existing.id}`)
+      return
+    }
 
     try {
       const response = await fetch('/api/scrape', {
@@ -56,7 +73,7 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-stone-50 flex items-center justify-center px-4">
+    <main className="min-h-screen bg-stone-50 flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-xl">
         {/* Logo / Header */}
         <div className="text-center mb-12">
@@ -114,7 +131,9 @@ export default function Home() {
               <p className="mt-3 text-sm text-red-600">{error}</p>
             )}
 
-            {isLoading && (
+            {notice ? (
+              <p className="mt-3 text-sm text-blue-600">{notice}</p>
+            ) : isLoading && (
               <p className="mt-3 text-sm text-stone-500">
                 Fetching company information…
               </p>
@@ -125,6 +144,29 @@ export default function Home() {
         <p className="text-center text-xs text-stone-400 mt-6">
           Paste any startup URL · AI reads the website and generates a professional memo
         </p>
+
+        {history.length > 0 && (
+          <div className="mt-10">
+            <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
+              Saved memos ({history.length})
+            </h2>
+            <div className="bg-white rounded-2xl border border-stone-200 shadow-sm divide-y divide-stone-100 max-h-80 overflow-y-auto">
+              {history.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => router.push(`/memo?id=${item.id}`)}
+                  className="w-full text-left px-5 py-3 flex items-center justify-between gap-3 hover:bg-stone-50 transition-colors"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-stone-800 truncate">{item.companyName}</p>
+                    <p className="text-xs text-stone-400 truncate">{normalizeUrl(item.url)}</p>
+                  </div>
+                  <span className="text-xs text-stone-400 flex-shrink-0">{item.date}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </main>
   )

@@ -14,13 +14,14 @@ export default function HistorySidebar({ currentId, onSelect, refreshTrigger }: 
   const [history, setHistory] = useState<HistoryItem[]>([])
 
   useEffect(() => {
-    setHistory(loadHistory())
+    loadHistory().then(setHistory)
   }, [refreshTrigger])
 
-  const handleDelete = (e: React.MouseEvent, id: string) => {
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
-    deleteFromHistory(id)
-    setHistory(loadHistory())
+    if (!confirm('Delete this memo from history?')) return
+    await deleteFromHistory(id)
+    setHistory(await loadHistory())
   }
 
   return (

@@ -10,7 +10,7 @@ import type { ChartSpec } from '@/components/UnitEconomicsCharts'
 import HistorySidebar from '@/components/HistorySidebar'
 import AiChat from '@/components/AiChat'
 import DataAssistant from '@/components/DataAssistant'
-import { saveToHistory, updateHistoryMemoText } from '@/lib/history'
+import { loadHistory, saveToHistory, updateHistoryMemoText } from '@/lib/history'
 import type { HistoryItem } from '@/lib/history'
 import type { MemoConfig, ScrapeResult } from '@/lib/types'
 
@@ -38,6 +38,9 @@ export default function MemoPage() {
   // History mode: viewing a saved memo instead of streaming a new one
   const [historyMode, setHistoryMode] = useState(false)
   const [historyMemoText, setHistoryMemoText] = useState('')
+  const [historyDate, setHistoryDate] = useState('')
+  // Resolves to the history id once the freshly generated memo is saved
+  const historySaveRef = useRef<Promise<string> | null>(null)
 
   // Allows overriding memoText after user edits a freshly generated memo
   const [memoOverride, setMemoOverride] = useState<string | null>(null)
@@ -249,6 +252,18 @@ export default function MemoPage() {
     if (startedRef.current) return
     startedRef.current = true
 
+    // /memo?id=… opens a saved memo instead of generating a new one
+    const openId = new URLSearchParams(window.location.search).get('id')
+    if (openId) {
+      setHistoryMode(true)
+      loadHistory().then((items) => {
+        const item = items.find((h) => h.id === openId)
+        if (item) handleHistorySelect(item)
+        else router.replace('/')
+      })
+      return
+    }
+
     const url = sessionStorage.getItem('lyla_url')
     const sectionsRaw = sessionStorage.getItem('lyla_sections')
     const scrapeRaw = sessionStorage.getItem('lyla_scrape')
@@ -373,7 +388,8 @@ export default function MemoPage() {
           next = next.replace(/<peer-charts-pending\s*\/?>/, replacement)
         }
         setMemoOverride(next)
-        if (currentHistoryId) updateHistoryMemoText(currentHistoryId, next)
+        const id = currentHistoryId ?? (await historySaveRef.current)
+        if (id) updateHistoryMemoText(id, next)
       } catch {
         // On failure, replace placeholders with a friendly note so the UI isn't stuck on spinners
         let next = memoText
@@ -388,15 +404,17 @@ export default function MemoPage() {
   useEffect(() => {
     if (phase === 'done' && memoText && companyName && !historySaved && !historyMode) {
       const url = sessionStorage.getItem('lyla_url') || ''
-      const saved = saveToHistory({
+      setHistorySaved(true)
+      historySaveRef.current = saveToHistory({
         companyName,
         url,
         date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
         memoText,
+      }).then((saved) => {
+        setCurrentHistoryId(saved.id)
+        setHistoryRefresh(n => n + 1)
+        return saved.id
       })
-      setCurrentHistoryId(saved.id)
-      setHistorySaved(true)
-      setHistoryRefresh(n => n + 1)
     }
   }, [phase, memoText, companyName, historySaved, historyMode])
 
@@ -474,6 +492,7 @@ export default function MemoPage() {
     setIsEditing(false)
     setHistoryMode(true)
     setHistoryMemoText(item.memoText)
+    setHistoryDate(item.date)
     setCompanyName(item.companyName)
     setCurrentHistoryId(item.id)
   }
@@ -606,7 +625,9 @@ export default function MemoPage() {
                 </div>
                 <h1 className="font-serif text-3xl font-bold text-stone-900">{displayCompany}</h1>
                 <p className="text-stone-500 text-sm mt-1">
-                  {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                  {historyMode && historyDate
+                    ? historyDate
+                    : new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
                 </p>
               </div>
 
